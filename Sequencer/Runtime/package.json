@@ -1,0 +1,22 @@
+{
+  "name": "com.sperlich.sequencer",
+  "version": "0.1.0",
+  "displayName": "AnimSequencer",
+  "description": "A modular visual scripting tool to animated various components within the inspector using PrimeTween.",
+  "unity": "6.3",
+  "author": {
+    "name": "Sperlich",
+    "url": "https://github.com/MrPifo"
+  },
+  "dependencies": {
+    
+  },
+  "keywords": [
+    "tool",
+    "sequencer",
+    "Sperlich",
+	"tweener",
+	"PrimeTween",
+	"Visual Scripting Tool"
+  ]
+}

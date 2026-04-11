@@ -1,0 +1,16 @@
+{
+  "name": "com.sperlich.pausemanager",
+  "version": "0.1.0",
+  "displayName": "Pause Manager",
+  "description": "",
+  "unity": "6.0",
+  "author": {
+    "name": "Sperlich",
+    "url": "https://github.com/MrPifo"
+  },
+  "keywords": [
+    "Sperlich",
+    "Types",
+    "Utility"
+  ]
+}

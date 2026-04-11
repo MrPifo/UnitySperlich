@@ -1,0 +1,18 @@
+{
+    "name": "Sperlich.Input",
+    "rootNamespace": "",
+    "references": [
+        "GUID:5ce0dff60954ba1489514d49bdce39b8",
+        "GUID:37124e22ec38e6e47b2e7a1ec93856ef",
+        "GUID:98388da73c5f3cb43b933e4642a2debf"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -1,0 +1,16 @@
+{
+  "name": "com.sperlich.gameloop",
+  "version": "0.1.0",
+  "displayName": "Game Loop",
+  "description": "",
+  "unity": "6.0",
+  "author": {
+    "name": "Sperlich",
+    "url": "https://github.com/MrPifo"
+  },
+  "keywords": [
+    "loop",
+	"Timer",
+    "Sperlich"
+  ]
+}

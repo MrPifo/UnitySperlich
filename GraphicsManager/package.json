@@ -1,0 +1,12 @@
+{
+  "name": "com.sperlich.graphicmanager",
+  "displayName": "GraphicManager",
+  "version": "1.0.0",
+  "description": "This package includes the ability on include a customized Graphic Settings Menu.",
+  "unity": "2022.3",
+  "unityRelease": "37f1",
+  "author": {
+    "name": "Lion Sperlich",
+    "email": "julian@sperlich.at"
+  }
+}

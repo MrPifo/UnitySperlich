@@ -1,0 +1,11 @@
+{
+  "name": "com.sperlich.prefabmanager",
+  "displayName": "PrefabManager",
+  "version": "0.1.0",
+  "description": "",
+  "unity": "6.0",
+  "author": {
+	  "name": "Lion Sperlich",
+	  "email": "julian@sperlich.at"
+  }
+}
