@@ -1,0 +1,17 @@
+{
+  "name": "com.sperlich.core",
+  "version": "0.1.0",
+  "displayName": "Sperlich Core",
+  "description": "Core-Library und Utility-Functions for all Sperlich-Tools.",
+  "unity": "6.0",
+  "author": {
+    "name": "Sperlich",
+    "url": "https://github.com/MrPifo"
+  },
+  "keywords": [
+    "Sperlich",
+    "Core",
+    "Utility",
+    "Base"
+  ]
+}
