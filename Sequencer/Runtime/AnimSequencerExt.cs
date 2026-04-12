@@ -7,349 +7,736 @@ namespace Sperlich.Sequencer {
 
 		#region Sequence Setup & Chaining
 		public static AnimSequencer.AnimStep AppendStep<T>(this AnimSequencer.AnimSequence seq, T config) where T : AnimConfig {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot AppendStep. Sequence is null.");
+				return null;
+			}
 			var step = new AnimSequencer.AnimStep {
 				type = config.GetAnimType()
 			};
-
 			config.ApplyTo(step);
 			seq.steps.Add(step);
-
 			return step;
 		}
-
 		public static AnimSequencer.AnimSequence AttachTo(this AnimSequencer.AnimSequence seq, GameObject target) {
-			if (target == null) return seq;
-			if (seq.owner != null) seq.owner.sequences.Remove(seq);
-
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot AttachTo. Sequence is null.");
+				return null;
+			}
+			if (target == null) {
+				Debug.LogError("[AnimSequencer] Cannot AttachTo. Target GameObject is null.");
+				return seq;
+			}
+			if (seq.owner != null) {
+				seq.owner.sequences.Remove(seq);
+			}
 			var targetSequencer = target.GetComponent<AnimSequencer>();
-			if (targetSequencer == null) targetSequencer = target.AddComponent<AnimSequencer>();
-
+			if (targetSequencer == null) {
+				targetSequencer = target.AddComponent<AnimSequencer>();
+			}
 			seq.owner = targetSequencer;
 			seq.isTemporary = false;
 			targetSequencer.sequences.Add(seq);
-
 			return seq;
 		}
 		#endregion
 
 		#region Playback & Lifecycle
 		public static void Play(this AnimSequencer.AnimSequence seq) {
-			if (seq.owner != null) seq.owner.PlaySequence(seq);
-			else Debug.LogWarning($"[AnimSequencer] Sequence '{seq.label}' has no owner.");
+			if (seq != null) {
+				if (seq.owner != null) {
+					seq.owner.PlaySequence(seq);
+				} else {
+					Debug.LogError($"[AnimSequencer] Cannot play. Sequence '{seq.label}' has no valid owner.");
+				}
+			} else {
+				Debug.LogError("[AnimSequencer] Cannot play. Sequence is null.");
+			}
 		}
-
-		public static void Pause(this AnimSequencer.AnimSequence seq) { if (seq.owner != null) seq.owner.Pause(seq.label); }
-		public static void Resume(this AnimSequencer.AnimSequence seq) { if (seq.owner != null) seq.owner.Resume(seq.label); }
-
-		public static AnimSequencer.AnimSequence OnComplete(this AnimSequencer.AnimSequence seq, System.Action action) { seq.onCompleteAction += action; return seq; }
-		public static AnimSequencer.AnimSequence OnStart(this AnimSequencer.AnimSequence seq, System.Action action) { seq.onStartAction += action; return seq; }
-
+		public static void Pause(this AnimSequencer.AnimSequence seq) {
+			if (seq != null) {
+				if (seq.owner != null) {
+					seq.owner.Pause(seq.label);
+				} else {
+					Debug.LogError($"[AnimSequencer] Cannot pause. Sequence '{seq.label}' has no valid owner.");
+				}
+			} else {
+				Debug.LogError("[AnimSequencer] Cannot pause. Sequence is null.");
+			}
+		}
+		public static void Resume(this AnimSequencer.AnimSequence seq) {
+			if (seq != null) {
+				if (seq.owner != null) {
+					seq.owner.Resume(seq.label);
+				} else {
+					Debug.LogError($"[AnimSequencer] Cannot resume. Sequence '{seq.label}' has no valid owner.");
+				}
+			} else {
+				Debug.LogError("[AnimSequencer] Cannot resume. Sequence is null.");
+			}
+		}
+		public static AnimSequencer.AnimSequence OnComplete(this AnimSequencer.AnimSequence seq, System.Action action) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot set OnComplete. Sequence is null.");
+				return null;
+			}
+			seq.onCompleteAction += action;
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence OnStart(this AnimSequencer.AnimSequence seq, System.Action action) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot set OnStart. Sequence is null.");
+				return null;
+			}
+			seq.onStartAction += action;
+			return seq;
+		}
 		public static async Task PlayAsync(this AnimSequencer.AnimSequence seq) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot PlayAsync. Sequence is null.");
+				return;
+			}
 			var tcs = new TaskCompletionSource<bool>();
 			System.Action completeAction = null;
-
-			completeAction = () => { seq.onCompleteAction -= completeAction; tcs.TrySetResult(true); };
+			completeAction = () => {
+				seq.onCompleteAction -= completeAction;
+				tcs.TrySetResult(true);
+			};
 			seq.onCompleteAction += completeAction;
 			seq.Play();
-
 			await tcs.Task;
 		}
-
-		public static CustomYieldInstruction WaitForCompletion(this AnimSequencer.AnimSequence seq) { return new WaitWhile(() => seq.isPlaying); }
-
-		// --- Sequencer Level Playback ---
+		public static CustomYieldInstruction WaitForCompletion(this AnimSequencer.AnimSequence seq) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot WaitForCompletion. Sequence is null.");
+				return null;
+			}
+			return new WaitWhile(() => seq.isPlaying);
+		}
 		public static async Task PlayAsync(this AnimSequencer sequencer, string sequenceLabel) {
+			if (sequencer == null) {
+				Debug.LogError("[AnimSequencer] Cannot PlayAsync. Sequencer is null.");
+				return;
+			}
 			var seq = sequencer.GetSequence(sequenceLabel);
-			if (seq != null) await seq.PlayAsync();
+			if (seq != null) {
+				await seq.PlayAsync();
+			} else {
+				Debug.LogError($"[AnimSequencer] Cannot PlayAsync. Sequence '{sequenceLabel}' not found.");
+			}
 		}
-
 		public static CustomYieldInstruction WaitForCompletion(this AnimSequencer sequencer, string sequenceLabel) {
+			if (sequencer == null) {
+				Debug.LogError("[AnimSequencer] Cannot WaitForCompletion. Sequencer is null.");
+				return null;
+			}
 			var seq = sequencer.GetSequence(sequenceLabel);
-			return seq != null ? seq.WaitForCompletion() : null;
-		}
-		#endregion
-
-		#region Locators (Sequence & Step)
-		public static AnimSequencer.AnimSequence GetLastSequence(this AnimSequencer sequencer) {
-			if (sequencer != null && sequencer.sequences.Count > 0) return sequencer.sequences[sequencer.sequences.Count - 1];
+			if (seq != null) {
+				return seq.WaitForCompletion();
+			} else {
+				Debug.LogError($"[AnimSequencer] Cannot WaitForCompletion. Sequence '{sequenceLabel}' not found.");
+			}
 			return null;
 		}
-
-		public static AnimSequencer.AnimStep FindStep(this AnimSequencer.AnimSequence seq, string tag) { return seq.steps.Find(s => s.tag == tag); }
-		public static AnimSequencer.AnimStep FindStep(this AnimSequencer.AnimSequence seq, int index) { return (index >= 0 && index < seq.steps.Count) ? seq.steps[index] : null; }
-		public static AnimSequencer.AnimStep GetLastStep(this AnimSequencer.AnimSequence seq) { return seq.steps.Count > 0 ? seq.steps[seq.steps.Count - 1] : null; }
 		#endregion
 
-		#region Fluent Mutators - Core Properties
-		// --- Duration ---
-		public static AnimSequencer.AnimStep SetDuration(this AnimSequencer.AnimStep s, float duration) { if (s != null) { s.duration = duration; } return s; }
-		public static AnimSequencer.AnimSequence SetDuration(this AnimSequencer.AnimSequence seq, float duration) { seq.GetLastStep()?.SetDuration(duration); return seq; }
-		public static AnimSequencer.AnimSequence SetDuration(this AnimSequencer.AnimSequence seq, string tag, float duration) { seq.FindStep(tag)?.SetDuration(duration); return seq; }
-		public static AnimSequencer.AnimSequence SetDuration(this AnimSequencer.AnimSequence seq, int index, float duration) { seq.FindStep(index)?.SetDuration(duration); return seq; }
-		public static AnimSequencer SetDuration(this AnimSequencer sequencer, float duration) { sequencer.GetLastSequence()?.SetDuration(duration); return sequencer; }
-		public static AnimSequencer SetDuration(this AnimSequencer sequencer, string seqLabel, float duration) { sequencer.GetSequence(seqLabel)?.SetDuration(duration); return sequencer; }
-		public static AnimSequencer SetDuration(this AnimSequencer sequencer, string seqLabel, string stepTag, float duration) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetDuration(duration); return sequencer; }
-		public static AnimSequencer SetDuration(this AnimSequencer sequencer, string seqLabel, int stepIndex, float duration) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetDuration(duration); return sequencer; }
-
-		// --- Delay ---
-		public static AnimSequencer.AnimStep SetDelay(this AnimSequencer.AnimStep s, float delay) { if (s != null) { s.delay = delay; } return s; }
-		public static AnimSequencer.AnimSequence SetDelay(this AnimSequencer.AnimSequence seq, float delay) { seq.GetLastStep()?.SetDelay(delay); return seq; }
-		public static AnimSequencer.AnimSequence SetDelay(this AnimSequencer.AnimSequence seq, string tag, float delay) { seq.FindStep(tag)?.SetDelay(delay); return seq; }
-		public static AnimSequencer.AnimSequence SetDelay(this AnimSequencer.AnimSequence seq, int index, float delay) { seq.FindStep(index)?.SetDelay(delay); return seq; }
-		public static AnimSequencer SetDelay(this AnimSequencer sequencer, float delay) { sequencer.GetLastSequence()?.SetDelay(delay); return sequencer; }
-		public static AnimSequencer SetDelay(this AnimSequencer sequencer, string seqLabel, float delay) { sequencer.GetSequence(seqLabel)?.SetDelay(delay); return sequencer; }
-		public static AnimSequencer SetDelay(this AnimSequencer sequencer, string seqLabel, string stepTag, float delay) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetDelay(delay); return sequencer; }
-		public static AnimSequencer SetDelay(this AnimSequencer sequencer, string seqLabel, int stepIndex, float delay) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetDelay(delay); return sequencer; }
-
-		// --- Ease ---
-		public static AnimSequencer.AnimStep SetEase(this AnimSequencer.AnimStep s, Ease ease) { if (s != null) { s.ease = ease; } return s; }
-		public static AnimSequencer.AnimSequence SetEase(this AnimSequencer.AnimSequence seq, Ease ease) { seq.GetLastStep()?.SetEase(ease); return seq; }
-		public static AnimSequencer.AnimSequence SetEase(this AnimSequencer.AnimSequence seq, string tag, Ease ease) { seq.FindStep(tag)?.SetEase(ease); return seq; }
-		public static AnimSequencer.AnimSequence SetEase(this AnimSequencer.AnimSequence seq, int index, Ease ease) { seq.FindStep(index)?.SetEase(ease); return seq; }
-		public static AnimSequencer SetEase(this AnimSequencer sequencer, Ease ease) { sequencer.GetLastSequence()?.SetEase(ease); return sequencer; }
-		public static AnimSequencer SetEase(this AnimSequencer sequencer, string seqLabel, Ease ease) { sequencer.GetSequence(seqLabel)?.SetEase(ease); return sequencer; }
-		public static AnimSequencer SetEase(this AnimSequencer sequencer, string seqLabel, string stepTag, Ease ease) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetEase(ease); return sequencer; }
-		public static AnimSequencer SetEase(this AnimSequencer sequencer, string seqLabel, int stepIndex, Ease ease) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetEase(ease); return sequencer; }
-
-		// --- Target ---
-		public static AnimSequencer.AnimStep SetTarget(this AnimSequencer.AnimStep s, Transform target) { if (s != null) { s.target = target; s.isInitialized = false; } return s; }
-		public static AnimSequencer.AnimSequence SetTarget(this AnimSequencer.AnimSequence seq, Transform target) { seq.GetLastStep()?.SetTarget(target); return seq; }
-		public static AnimSequencer.AnimSequence SetTarget(this AnimSequencer.AnimSequence seq, string tag, Transform target) { seq.FindStep(tag)?.SetTarget(target); return seq; }
-		public static AnimSequencer.AnimSequence SetTarget(this AnimSequencer.AnimSequence seq, int index, Transform target) { seq.FindStep(index)?.SetTarget(target); return seq; }
-		public static AnimSequencer SetTarget(this AnimSequencer sequencer, Transform target) { sequencer.GetLastSequence()?.SetTarget(target); return sequencer; }
-		public static AnimSequencer SetTarget(this AnimSequencer sequencer, string seqLabel, Transform target) { sequencer.GetSequence(seqLabel)?.SetTarget(target); return sequencer; }
-		public static AnimSequencer SetTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, Transform target) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetTarget(target); return sequencer; }
-		public static AnimSequencer SetTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, Transform target) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetTarget(target); return sequencer; }
+		#region Locators & Central Evaluators
+		public static int FindStepIndex(this AnimSequencer.AnimSequence seq, string tag) {
+			if (seq == null) {
+				return -1;
+			}
+			return seq.steps.FindIndex(s => s.tag == tag);
+		}
+		private static void ApplyToStep(AnimSequencer.AnimSequence seq, int index, System.Action<AnimSequencer.AnimStep> action, string propertyName) {
+			if (seq == null) {
+				Debug.LogError($"[AnimSequencer] Cannot set {propertyName}. Sequence is null.");
+				return;
+			}
+			if (index >= 0) {
+				if (index < seq.steps.Count) {
+					var step = seq.steps[index];
+					if (step != null) {
+						action(step);
+					}
+				} else {
+					Debug.LogError($"[AnimSequencer] Cannot set {propertyName}. Step at index {index} is out of bounds in sequence '{seq.label}'.");
+				}
+			} else {
+				Debug.LogError($"[AnimSequencer] Cannot set {propertyName}. Invalid step index ({index}) in sequence '{seq.label}'. Check if your step tag exists.");
+			}
+		}
+		private static AnimSequencer ApplyToSequence(AnimSequencer sequencer, string seqLabel, System.Action<AnimSequencer.AnimSequence> action) {
+			if (sequencer == null) {
+				Debug.LogError($"[AnimSequencer] Cannot modify sequence '{seqLabel}'. Sequencer component is null.");
+				return null;
+			}
+			var seq = sequencer.GetSequence(seqLabel);
+			if (seq != null) {
+				action(seq);
+			} else {
+				Debug.LogError($"[AnimSequencer] Sequence '{seqLabel}' not found on '{sequencer.gameObject.name}'.");
+			}
+			return sequencer;
+		}
 		#endregion
 
-		#region Fluent Mutators - Transform & UI
-		// --- Fade Alpha ---
-		public static AnimSequencer.AnimStep SetFadeAlpha(this AnimSequencer.AnimStep s, float alpha) { if (s != null) { s.setFadeValue = alpha; } return s; }
-		public static AnimSequencer.AnimSequence SetFadeAlpha(this AnimSequencer.AnimSequence seq, float alpha) { seq.GetLastStep()?.SetFadeAlpha(alpha); return seq; }
-		public static AnimSequencer.AnimSequence SetFadeAlpha(this AnimSequencer.AnimSequence seq, string tag, float alpha) { seq.FindStep(tag)?.SetFadeAlpha(alpha); return seq; }
-		public static AnimSequencer.AnimSequence SetFadeAlpha(this AnimSequencer.AnimSequence seq, int index, float alpha) { seq.FindStep(index)?.SetFadeAlpha(alpha); return seq; }
-		public static AnimSequencer SetFadeAlpha(this AnimSequencer sequencer, float alpha) { sequencer.GetLastSequence()?.SetFadeAlpha(alpha); return sequencer; }
-		public static AnimSequencer SetFadeAlpha(this AnimSequencer sequencer, string seqLabel, float alpha) { sequencer.GetSequence(seqLabel)?.SetFadeAlpha(alpha); return sequencer; }
-		public static AnimSequencer SetFadeAlpha(this AnimSequencer sequencer, string seqLabel, string stepTag, float alpha) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetFadeAlpha(alpha); return sequencer; }
-		public static AnimSequencer SetFadeAlpha(this AnimSequencer sequencer, string seqLabel, int stepIndex, float alpha) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetFadeAlpha(alpha); return sequencer; }
-
-		// --- Scale ---
-		public static AnimSequencer.AnimStep SetScaleTo(this AnimSequencer.AnimStep s, Vector3 scale) { if (s != null) { s.scaleTo = scale; s.scaleTo3D = scale; } return s; }
-		public static AnimSequencer.AnimSequence SetScaleTo(this AnimSequencer.AnimSequence seq, Vector3 scale) { seq.GetLastStep()?.SetScaleTo(scale); return seq; }
-		public static AnimSequencer.AnimSequence SetScaleTo(this AnimSequencer.AnimSequence seq, string tag, Vector3 scale) { seq.FindStep(tag)?.SetScaleTo(scale); return seq; }
-		public static AnimSequencer.AnimSequence SetScaleTo(this AnimSequencer.AnimSequence seq, int index, Vector3 scale) { seq.FindStep(index)?.SetScaleTo(scale); return seq; }
-		public static AnimSequencer SetScaleTo(this AnimSequencer sequencer, Vector3 scale) { sequencer.GetLastSequence()?.SetScaleTo(scale); return sequencer; }
-		public static AnimSequencer SetScaleTo(this AnimSequencer sequencer, string seqLabel, Vector3 scale) { sequencer.GetSequence(seqLabel)?.SetScaleTo(scale); return sequencer; }
-		public static AnimSequencer SetScaleTo(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector3 scale) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetScaleTo(scale); return sequencer; }
-		public static AnimSequencer SetScaleTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector3 scale) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetScaleTo(scale); return sequencer; }
-
-		// --- Slide ---
-		public static AnimSequencer.AnimStep SetSlideTo(this AnimSequencer.AnimStep s, Vector2 slide) { if (s != null) { s.slideTo = slide; } return s; }
-		public static AnimSequencer.AnimSequence SetSlideTo(this AnimSequencer.AnimSequence seq, Vector2 slide) { seq.GetLastStep()?.SetSlideTo(slide); return seq; }
-		public static AnimSequencer.AnimSequence SetSlideTo(this AnimSequencer.AnimSequence seq, string tag, Vector2 slide) { seq.FindStep(tag)?.SetSlideTo(slide); return seq; }
-		public static AnimSequencer.AnimSequence SetSlideTo(this AnimSequencer.AnimSequence seq, int index, Vector2 slide) { seq.FindStep(index)?.SetSlideTo(slide); return seq; }
-		public static AnimSequencer SetSlideTo(this AnimSequencer sequencer, Vector2 slide) { sequencer.GetLastSequence()?.SetSlideTo(slide); return sequencer; }
-		public static AnimSequencer SetSlideTo(this AnimSequencer sequencer, string seqLabel, Vector2 slide) { sequencer.GetSequence(seqLabel)?.SetSlideTo(slide); return sequencer; }
-		public static AnimSequencer SetSlideTo(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector2 slide) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetSlideTo(slide); return sequencer; }
-		public static AnimSequencer SetSlideTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector2 slide) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetSlideTo(slide); return sequencer; }
-
-		// --- Rotate ---
-		public static AnimSequencer.AnimStep SetRotateTo(this AnimSequencer.AnimStep s, float rotation) { if (s != null) { s.rotateTo = rotation; } return s; }
-		public static AnimSequencer.AnimSequence SetRotateTo(this AnimSequencer.AnimSequence seq, float rotation) { seq.GetLastStep()?.SetRotateTo(rotation); return seq; }
-		public static AnimSequencer.AnimSequence SetRotateTo(this AnimSequencer.AnimSequence seq, string tag, float rotation) { seq.FindStep(tag)?.SetRotateTo(rotation); return seq; }
-		public static AnimSequencer.AnimSequence SetRotateTo(this AnimSequencer.AnimSequence seq, int index, float rotation) { seq.FindStep(index)?.SetRotateTo(rotation); return seq; }
-		public static AnimSequencer SetRotateTo(this AnimSequencer sequencer, float rotation) { sequencer.GetLastSequence()?.SetRotateTo(rotation); return sequencer; }
-		public static AnimSequencer SetRotateTo(this AnimSequencer sequencer, string seqLabel, float rotation) { sequencer.GetSequence(seqLabel)?.SetRotateTo(rotation); return sequencer; }
-		public static AnimSequencer SetRotateTo(this AnimSequencer sequencer, string seqLabel, string stepTag, float rotation) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetRotateTo(rotation); return sequencer; }
-		public static AnimSequencer SetRotateTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, float rotation) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetRotateTo(rotation); return sequencer; }
-
-		// --- ColorTo (General) ---
-		public static AnimSequencer.AnimStep SetColorTo(this AnimSequencer.AnimStep s, Color color) { if (s != null) { s.colorTo = color; } return s; }
-		public static AnimSequencer.AnimSequence SetColorTo(this AnimSequencer.AnimSequence seq, Color color) { seq.GetLastStep()?.SetColorTo(color); return seq; }
-		public static AnimSequencer.AnimSequence SetColorTo(this AnimSequencer.AnimSequence seq, string tag, Color color) { seq.FindStep(tag)?.SetColorTo(color); return seq; }
-		public static AnimSequencer.AnimSequence SetColorTo(this AnimSequencer.AnimSequence seq, int index, Color color) { seq.FindStep(index)?.SetColorTo(color); return seq; }
-		public static AnimSequencer SetColorTo(this AnimSequencer sequencer, Color color) { sequencer.GetLastSequence()?.SetColorTo(color); return sequencer; }
-		public static AnimSequencer SetColorTo(this AnimSequencer sequencer, string seqLabel, Color color) { sequencer.GetSequence(seqLabel)?.SetColorTo(color); return sequencer; }
-		public static AnimSequencer SetColorTo(this AnimSequencer sequencer, string seqLabel, string stepTag, Color color) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetColorTo(color); return sequencer; }
-		public static AnimSequencer SetColorTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, Color color) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetColorTo(color); return sequencer; }
-
-		// --- SetColorColor (Specific) ---
-		public static AnimSequencer.AnimStep SetColorColor(this AnimSequencer.AnimStep s, Color color) { if (s != null) { s.colorTo = color; } return s; }
-		public static AnimSequencer.AnimSequence SetColorColor(this AnimSequencer.AnimSequence seq, Color color) { seq.GetLastStep()?.SetColorColor(color); return seq; }
-		public static AnimSequencer.AnimSequence SetColorColor(this AnimSequencer.AnimSequence seq, string tag, Color color) { seq.FindStep(tag)?.SetColorColor(color); return seq; }
-		public static AnimSequencer.AnimSequence SetColorColor(this AnimSequencer.AnimSequence seq, int index, Color color) { seq.FindStep(index)?.SetColorColor(color); return seq; }
-		public static AnimSequencer SetColorColor(this AnimSequencer sequencer, Color color) { sequencer.GetLastSequence()?.SetColorColor(color); return sequencer; }
-		public static AnimSequencer SetColorColor(this AnimSequencer sequencer, string seqLabel, Color color) { sequencer.GetSequence(seqLabel)?.SetColorColor(color); return sequencer; }
-		public static AnimSequencer SetColorColor(this AnimSequencer sequencer, string seqLabel, string stepTag, Color color) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetColorColor(color); return sequencer; }
-		public static AnimSequencer SetColorColor(this AnimSequencer sequencer, string seqLabel, int stepIndex, Color color) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetColorColor(color); return sequencer; }
-
-		// --- SizeDelta ---
-		public static AnimSequencer.AnimStep SetSizeDeltaTo(this AnimSequencer.AnimStep s, Vector2 size) { if (s != null) { s.sizeDeltaTo = size; } return s; }
-		public static AnimSequencer.AnimSequence SetSizeDeltaTo(this AnimSequencer.AnimSequence seq, Vector2 size) { seq.GetLastStep()?.SetSizeDeltaTo(size); return seq; }
-		public static AnimSequencer.AnimSequence SetSizeDeltaTo(this AnimSequencer.AnimSequence seq, string tag, Vector2 size) { seq.FindStep(tag)?.SetSizeDeltaTo(size); return seq; }
-		public static AnimSequencer.AnimSequence SetSizeDeltaTo(this AnimSequencer.AnimSequence seq, int index, Vector2 size) { seq.FindStep(index)?.SetSizeDeltaTo(size); return seq; }
-		public static AnimSequencer SetSizeDeltaTo(this AnimSequencer sequencer, Vector2 size) { sequencer.GetLastSequence()?.SetSizeDeltaTo(size); return sequencer; }
-		public static AnimSequencer SetSizeDeltaTo(this AnimSequencer sequencer, string seqLabel, Vector2 size) { sequencer.GetSequence(seqLabel)?.SetSizeDeltaTo(size); return sequencer; }
-		public static AnimSequencer SetSizeDeltaTo(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector2 size) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetSizeDeltaTo(size); return sequencer; }
-		public static AnimSequencer SetSizeDeltaTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector2 size) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetSizeDeltaTo(size); return sequencer; }
-
-		// --- FillAmount ---
-		public static AnimSequencer.AnimStep SetFillAmountTo(this AnimSequencer.AnimStep s, float amount) { if (s != null) { s.fillAmountTo = amount; } return s; }
-		public static AnimSequencer.AnimSequence SetFillAmountTo(this AnimSequencer.AnimSequence seq, float amount) { seq.GetLastStep()?.SetFillAmountTo(amount); return seq; }
-		public static AnimSequencer.AnimSequence SetFillAmountTo(this AnimSequencer.AnimSequence seq, string tag, float amount) { seq.FindStep(tag)?.SetFillAmountTo(amount); return seq; }
-		public static AnimSequencer.AnimSequence SetFillAmountTo(this AnimSequencer.AnimSequence seq, int index, float amount) { seq.FindStep(index)?.SetFillAmountTo(amount); return seq; }
-		public static AnimSequencer SetFillAmountTo(this AnimSequencer sequencer, float amount) { sequencer.GetLastSequence()?.SetFillAmountTo(amount); return sequencer; }
-		public static AnimSequencer SetFillAmountTo(this AnimSequencer sequencer, string seqLabel, float amount) { sequencer.GetSequence(seqLabel)?.SetFillAmountTo(amount); return sequencer; }
-		public static AnimSequencer SetFillAmountTo(this AnimSequencer sequencer, string seqLabel, string stepTag, float amount) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetFillAmountTo(amount); return sequencer; }
-		public static AnimSequencer SetFillAmountTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, float amount) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetFillAmountTo(amount); return sequencer; }
+		#region Duration
+		public static AnimSequencer.AnimSequence SetDuration(this AnimSequencer.AnimSequence seq, int index, float duration) {
+			ApplyToStep(seq, index, s => s.duration = duration, "Duration");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetDuration(this AnimSequencer.AnimSequence seq, string tag, float duration) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetDuration(index, duration);
+		}
+		public static AnimSequencer SetDuration(this AnimSequencer sequencer, string seqLabel, int stepIndex, float duration) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetDuration(stepIndex, duration));
+		}
+		public static AnimSequencer SetDuration(this AnimSequencer sequencer, string seqLabel, string stepTag, float duration) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetDuration(stepTag, duration));
+		}
 		#endregion
 
-		#region Fluent Mutators - Instant Data & Text Setters
-		// --- SetText (General) ---
-		public static AnimSequencer.AnimStep SetText(this AnimSequencer.AnimStep s, string text) { if (s != null) { s.setTextValue = text; } return s; }
-		public static AnimSequencer.AnimSequence SetText(this AnimSequencer.AnimSequence seq, string text) { seq.GetLastStep()?.SetText(text); return seq; }
-		public static AnimSequencer.AnimSequence SetText(this AnimSequencer.AnimSequence seq, string tag, string text) { seq.FindStep(tag)?.SetText(text); return seq; }
-		public static AnimSequencer.AnimSequence SetText(this AnimSequencer.AnimSequence seq, int index, string text) { seq.FindStep(index)?.SetText(text); return seq; }
-		public static AnimSequencer SetText(this AnimSequencer sequencer, string text) { sequencer.GetLastSequence()?.SetText(text); return sequencer; }
-		public static AnimSequencer SetText(this AnimSequencer sequencer, string seqLabel, string text) { sequencer.GetSequence(seqLabel)?.SetText(text); return sequencer; }
-		public static AnimSequencer SetText(this AnimSequencer sequencer, string seqLabel, string stepTag, string text) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetText(text); return sequencer; }
-		public static AnimSequencer SetText(this AnimSequencer sequencer, string seqLabel, int stepIndex, string text) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetText(text); return sequencer; }
-
-		// --- SetTypeWriterText (Specific) ---
-		public static AnimSequencer.AnimStep SetTypeWriterText(this AnimSequencer.AnimStep s, string text) { if (s != null) { s.setTextValue = text; } return s; }
-		public static AnimSequencer.AnimSequence SetTypeWriterText(this AnimSequencer.AnimSequence seq, string text) { seq.GetLastStep()?.SetTypeWriterText(text); return seq; }
-		public static AnimSequencer.AnimSequence SetTypeWriterText(this AnimSequencer.AnimSequence seq, string tag, string text) { seq.FindStep(tag)?.SetTypeWriterText(text); return seq; }
-		public static AnimSequencer.AnimSequence SetTypeWriterText(this AnimSequencer.AnimSequence seq, int index, string text) { seq.FindStep(index)?.SetTypeWriterText(text); return seq; }
-		public static AnimSequencer SetTypeWriterText(this AnimSequencer sequencer, string text) { sequencer.GetLastSequence()?.SetTypeWriterText(text); return sequencer; }
-		public static AnimSequencer SetTypeWriterText(this AnimSequencer sequencer, string seqLabel, string text) { sequencer.GetSequence(seqLabel)?.SetTypeWriterText(text); return sequencer; }
-		public static AnimSequencer SetTypeWriterText(this AnimSequencer sequencer, string seqLabel, string stepTag, string text) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetTypeWriterText(text); return sequencer; }
-		public static AnimSequencer SetTypeWriterText(this AnimSequencer sequencer, string seqLabel, int stepIndex, string text) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetTypeWriterText(text); return sequencer; }
-
-		// --- SetTextCounterTarget (To Only) ---
-		public static AnimSequencer.AnimStep SetTextCounterTarget(this AnimSequencer.AnimStep s, float target) { if (s != null) { s.textCounterTo = target; } return s; }
-		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, float target) { seq.GetLastStep()?.SetTextCounterTarget(target); return seq; }
-		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, string tag, float target) { seq.FindStep(tag)?.SetTextCounterTarget(target); return seq; }
-		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, int index, float target) { seq.FindStep(index)?.SetTextCounterTarget(target); return seq; }
-		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, float target) { sequencer.GetLastSequence()?.SetTextCounterTarget(target); return sequencer; }
-		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, float target) { sequencer.GetSequence(seqLabel)?.SetTextCounterTarget(target); return sequencer; }
-		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, float target) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetTextCounterTarget(target); return sequencer; }
-		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, float target) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetTextCounterTarget(target); return sequencer; }
-
-		// --- SetTextCounterTarget (From & To) ---
-		public static AnimSequencer.AnimStep SetTextCounterTarget(this AnimSequencer.AnimStep s, float from, float to) { if (s != null) { s.textCounterFrom = from; s.textCounterTo = to; s.animateFromCurrent = false; } return s; }
-		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, float from, float to) { seq.GetLastStep()?.SetTextCounterTarget(from, to); return seq; }
-		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, string tag, float from, float to) { seq.FindStep(tag)?.SetTextCounterTarget(from, to); return seq; }
-		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, int index, float from, float to) { seq.FindStep(index)?.SetTextCounterTarget(from, to); return seq; }
-		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, float from, float to) { sequencer.GetLastSequence()?.SetTextCounterTarget(from, to); return sequencer; }
-		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, float from, float to) { sequencer.GetSequence(seqLabel)?.SetTextCounterTarget(from, to); return sequencer; }
-		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, float from, float to) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetTextCounterTarget(from, to); return sequencer; }
-		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, float from, float to) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetTextCounterTarget(from, to); return sequencer; }
-
-		// --- SetActive ---
-		public static AnimSequencer.AnimStep SetActive(this AnimSequencer.AnimStep s, bool isActive) { if (s != null) { s.setActiveValue = isActive; } return s; }
-		public static AnimSequencer.AnimSequence SetActive(this AnimSequencer.AnimSequence seq, bool isActive) { seq.GetLastStep()?.SetActive(isActive); return seq; }
-		public static AnimSequencer.AnimSequence SetActive(this AnimSequencer.AnimSequence seq, string tag, bool isActive) { seq.FindStep(tag)?.SetActive(isActive); return seq; }
-		public static AnimSequencer.AnimSequence SetActive(this AnimSequencer.AnimSequence seq, int index, bool isActive) { seq.FindStep(index)?.SetActive(isActive); return seq; }
-		public static AnimSequencer SetActive(this AnimSequencer sequencer, bool isActive) { sequencer.GetLastSequence()?.SetActive(isActive); return sequencer; }
-		public static AnimSequencer SetActive(this AnimSequencer sequencer, string seqLabel, bool isActive) { sequencer.GetSequence(seqLabel)?.SetActive(isActive); return sequencer; }
-		public static AnimSequencer SetActive(this AnimSequencer sequencer, string seqLabel, string stepTag, bool isActive) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetActive(isActive); return sequencer; }
-		public static AnimSequencer SetActive(this AnimSequencer sequencer, string seqLabel, int stepIndex, bool isActive) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetActive(isActive); return sequencer; }
-
-		// --- SetSprite (General) ---
-		public static AnimSequencer.AnimStep SetSprite(this AnimSequencer.AnimStep s, Sprite sprite) { if (s != null) { s.setSpriteValue = sprite; } return s; }
-		public static AnimSequencer.AnimSequence SetSprite(this AnimSequencer.AnimSequence seq, Sprite sprite) { seq.GetLastStep()?.SetSprite(sprite); return seq; }
-		public static AnimSequencer.AnimSequence SetSprite(this AnimSequencer.AnimSequence seq, string tag, Sprite sprite) { seq.FindStep(tag)?.SetSprite(sprite); return seq; }
-		public static AnimSequencer.AnimSequence SetSprite(this AnimSequencer.AnimSequence seq, int index, Sprite sprite) { seq.FindStep(index)?.SetSprite(sprite); return seq; }
-		public static AnimSequencer SetSprite(this AnimSequencer sequencer, Sprite sprite) { sequencer.GetLastSequence()?.SetSprite(sprite); return sequencer; }
-		public static AnimSequencer SetSprite(this AnimSequencer sequencer, string seqLabel, Sprite sprite) { sequencer.GetSequence(seqLabel)?.SetSprite(sprite); return sequencer; }
-		public static AnimSequencer SetSprite(this AnimSequencer sequencer, string seqLabel, string stepTag, Sprite sprite) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetSprite(sprite); return sequencer; }
-		public static AnimSequencer SetSprite(this AnimSequencer sequencer, string seqLabel, int stepIndex, Sprite sprite) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetSprite(sprite); return sequencer; }
-
-		// --- SetImageSprite (Specific) ---
-		public static AnimSequencer.AnimStep SetImageSprite(this AnimSequencer.AnimStep s, Sprite sprite) { if (s != null) { s.setSpriteValue = sprite; } return s; }
-		public static AnimSequencer.AnimSequence SetImageSprite(this AnimSequencer.AnimSequence seq, Sprite sprite) { seq.GetLastStep()?.SetImageSprite(sprite); return seq; }
-		public static AnimSequencer.AnimSequence SetImageSprite(this AnimSequencer.AnimSequence seq, string tag, Sprite sprite) { seq.FindStep(tag)?.SetImageSprite(sprite); return seq; }
-		public static AnimSequencer.AnimSequence SetImageSprite(this AnimSequencer.AnimSequence seq, int index, Sprite sprite) { seq.FindStep(index)?.SetImageSprite(sprite); return seq; }
-		public static AnimSequencer SetImageSprite(this AnimSequencer sequencer, Sprite sprite) { sequencer.GetLastSequence()?.SetImageSprite(sprite); return sequencer; }
-		public static AnimSequencer SetImageSprite(this AnimSequencer sequencer, string seqLabel, Sprite sprite) { sequencer.GetSequence(seqLabel)?.SetImageSprite(sprite); return sequencer; }
-		public static AnimSequencer SetImageSprite(this AnimSequencer sequencer, string seqLabel, string stepTag, Sprite sprite) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetImageSprite(sprite); return sequencer; }
-		public static AnimSequencer SetImageSprite(this AnimSequencer sequencer, string seqLabel, int stepIndex, Sprite sprite) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetImageSprite(sprite); return sequencer; }
+		#region Delay
+		public static AnimSequencer.AnimSequence SetDelay(this AnimSequencer.AnimSequence seq, int index, float delay) {
+			ApplyToStep(seq, index, s => s.delay = delay, "Delay");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetDelay(this AnimSequencer.AnimSequence seq, string tag, float delay) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetDelay(index, delay);
+		}
+		public static AnimSequencer SetDelay(this AnimSequencer sequencer, string seqLabel, int stepIndex, float delay) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetDelay(stepIndex, delay));
+		}
+		public static AnimSequencer SetDelay(this AnimSequencer sequencer, string seqLabel, string stepTag, float delay) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetDelay(stepTag, delay));
+		}
 		#endregion
 
-		#region Fluent Mutators - Specific Features
-		// --- Wait Method ---
-		public static AnimSequencer.AnimStep SetWaitMethod(this AnimSequencer.AnimStep s, WaitMethod method) { if (s != null) { s.waitMethod = method; } return s; }
-		public static AnimSequencer.AnimSequence SetWaitMethod(this AnimSequencer.AnimSequence seq, WaitMethod method) { seq.GetLastStep()?.SetWaitMethod(method); return seq; }
-		public static AnimSequencer.AnimSequence SetWaitMethod(this AnimSequencer.AnimSequence seq, string tag, WaitMethod method) { seq.FindStep(tag)?.SetWaitMethod(method); return seq; }
-		public static AnimSequencer.AnimSequence SetWaitMethod(this AnimSequencer.AnimSequence seq, int index, WaitMethod method) { seq.FindStep(index)?.SetWaitMethod(method); return seq; }
-		public static AnimSequencer SetWaitMethod(this AnimSequencer sequencer, WaitMethod method) { sequencer.GetLastSequence()?.SetWaitMethod(method); return sequencer; }
-		public static AnimSequencer SetWaitMethod(this AnimSequencer sequencer, string seqLabel, WaitMethod method) { sequencer.GetSequence(seqLabel)?.SetWaitMethod(method); return sequencer; }
-		public static AnimSequencer SetWaitMethod(this AnimSequencer sequencer, string seqLabel, string stepTag, WaitMethod method) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetWaitMethod(method); return sequencer; }
-		public static AnimSequencer SetWaitMethod(this AnimSequencer sequencer, string seqLabel, int stepIndex, WaitMethod method) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetWaitMethod(method); return sequencer; }
-
-		// --- WaitUntil Condition ---
-		public static AnimSequencer.AnimStep SetCondition(this AnimSequencer.AnimStep s, System.Func<bool> condition) { if (s != null) { s.waitConditionLambda = condition; } return s; }
-		public static AnimSequencer.AnimSequence SetCondition(this AnimSequencer.AnimSequence seq, System.Func<bool> condition) { seq.GetLastStep()?.SetCondition(condition); return seq; }
-		public static AnimSequencer SetCondition(this AnimSequencer sequencer, System.Func<bool> condition) { sequencer.GetLastSequence()?.SetCondition(condition); return sequencer; }
-		public static AnimSequencer SetCondition(this AnimSequencer sequencer, string seqLabel, System.Func<bool> condition) { sequencer.GetSequence(seqLabel)?.SetCondition(condition); return sequencer; }
-		public static AnimSequencer SetCondition(this AnimSequencer sequencer, string seqLabel, string stepTag, System.Func<bool> condition) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetCondition(condition); return sequencer; }
-		public static AnimSequencer SetCondition(this AnimSequencer sequencer, string seqLabel, int stepIndex, System.Func<bool> condition) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetCondition(condition); return sequencer; }
-
-		// --- TimeScale ---
-		public static AnimSequencer.AnimStep SetTimeScale(this AnimSequencer.AnimStep s, float timeScale) { if (s != null) { s.timeScaleTo = timeScale; } return s; }
-		public static AnimSequencer.AnimSequence SetTimeScale(this AnimSequencer.AnimSequence seq, float timeScale) { seq.GetLastStep()?.SetTimeScale(timeScale); return seq; }
-		public static AnimSequencer SetTimeScale(this AnimSequencer sequencer, float timeScale) { sequencer.GetLastSequence()?.SetTimeScale(timeScale); return sequencer; }
-		public static AnimSequencer SetTimeScale(this AnimSequencer sequencer, string seqLabel, float timeScale) { sequencer.GetSequence(seqLabel)?.SetTimeScale(timeScale); return sequencer; }
-		public static AnimSequencer SetTimeScale(this AnimSequencer sequencer, string seqLabel, string stepTag, float timeScale) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetTimeScale(timeScale); return sequencer; }
-		public static AnimSequencer SetTimeScale(this AnimSequencer sequencer, string seqLabel, int stepIndex, float timeScale) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetTimeScale(timeScale); return sequencer; }
-
-		// --- Trigger Sequence ---
-		public static AnimSequencer.AnimStep SetTriggerSequence(this AnimSequencer.AnimStep s, string sequenceLabel) { if (s != null) { s.triggerSequenceLabel = sequenceLabel; } return s; }
-		public static AnimSequencer.AnimSequence SetTriggerSequence(this AnimSequencer.AnimSequence seq, string sequenceLabel) { seq.GetLastStep()?.SetTriggerSequence(sequenceLabel); return seq; }
-		public static AnimSequencer SetTriggerSequence(this AnimSequencer sequencer, string sequenceLabel) { sequencer.GetLastSequence()?.SetTriggerSequence(sequenceLabel); return sequencer; }
-		public static AnimSequencer SetTriggerSequence(this AnimSequencer sequencer, string seqLabel, string sequenceLabel) { sequencer.GetSequence(seqLabel)?.SetTriggerSequence(sequenceLabel); return sequencer; }
-		public static AnimSequencer SetTriggerSequence(this AnimSequencer sequencer, string seqLabel, string stepTag, string sequenceLabel) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetTriggerSequence(sequenceLabel); return sequencer; }
-		public static AnimSequencer SetTriggerSequence(this AnimSequencer sequencer, string seqLabel, int stepIndex, string sequenceLabel) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetTriggerSequence(sequenceLabel); return sequencer; }
-
-		// --- Material Float ---
-		public static AnimSequencer.AnimStep SetMaterialFloat(this AnimSequencer.AnimStep s, float value) { if (s != null) { s.materialFloatTo = value; } return s; }
-		public static AnimSequencer.AnimSequence SetMaterialFloat(this AnimSequencer.AnimSequence seq, float value) { seq.GetLastStep()?.SetMaterialFloat(value); return seq; }
-		public static AnimSequencer SetMaterialFloat(this AnimSequencer sequencer, float value) { sequencer.GetLastSequence()?.SetMaterialFloat(value); return sequencer; }
-		public static AnimSequencer SetMaterialFloat(this AnimSequencer sequencer, string seqLabel, float value) { sequencer.GetSequence(seqLabel)?.SetMaterialFloat(value); return sequencer; }
-		public static AnimSequencer SetMaterialFloat(this AnimSequencer sequencer, string seqLabel, string stepTag, float value) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetMaterialFloat(value); return sequencer; }
-		public static AnimSequencer SetMaterialFloat(this AnimSequencer sequencer, string seqLabel, int stepIndex, float value) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetMaterialFloat(value); return sequencer; }
-
-		// --- Material Color ---
-		public static AnimSequencer.AnimStep SetMaterialColor(this AnimSequencer.AnimStep s, Color color) { if (s != null) { s.materialColorTo = color; } return s; }
-		public static AnimSequencer.AnimSequence SetMaterialColor(this AnimSequencer.AnimSequence seq, Color color) { seq.GetLastStep()?.SetMaterialColor(color); return seq; }
-		public static AnimSequencer SetMaterialColor(this AnimSequencer sequencer, Color color) { sequencer.GetLastSequence()?.SetMaterialColor(color); return sequencer; }
-		public static AnimSequencer SetMaterialColor(this AnimSequencer sequencer, string seqLabel, Color color) { sequencer.GetSequence(seqLabel)?.SetMaterialColor(color); return sequencer; }
-		public static AnimSequencer SetMaterialColor(this AnimSequencer sequencer, string seqLabel, string stepTag, Color color) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetMaterialColor(color); return sequencer; }
-		public static AnimSequencer SetMaterialColor(this AnimSequencer sequencer, string seqLabel, int stepIndex, Color color) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetMaterialColor(color); return sequencer; }
-
-		// --- Audio Volume ---
-		public static AnimSequencer.AnimStep SetAudioVolume(this AnimSequencer.AnimStep s, Vector2 volumeMinMax) { if (s != null) { s.audioVolume = volumeMinMax; } return s; }
-		public static AnimSequencer.AnimSequence SetAudioVolume(this AnimSequencer.AnimSequence seq, Vector2 volumeMinMax) { seq.GetLastStep()?.SetAudioVolume(volumeMinMax); return seq; }
-		public static AnimSequencer SetAudioVolume(this AnimSequencer sequencer, Vector2 volumeMinMax) { sequencer.GetLastSequence()?.SetAudioVolume(volumeMinMax); return sequencer; }
-		public static AnimSequencer SetAudioVolume(this AnimSequencer sequencer, string seqLabel, Vector2 volumeMinMax) { sequencer.GetSequence(seqLabel)?.SetAudioVolume(volumeMinMax); return sequencer; }
-		public static AnimSequencer SetAudioVolume(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector2 volumeMinMax) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetAudioVolume(volumeMinMax); return sequencer; }
-		public static AnimSequencer SetAudioVolume(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector2 volumeMinMax) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetAudioVolume(volumeMinMax); return sequencer; }
-
-		// --- Audio Pitch ---
-		public static AnimSequencer.AnimStep SetAudioPitch(this AnimSequencer.AnimStep s, Vector2 pitchMinMax) { if (s != null) { s.audioPitch = pitchMinMax; } return s; }
-		public static AnimSequencer.AnimSequence SetAudioPitch(this AnimSequencer.AnimSequence seq, Vector2 pitchMinMax) { seq.GetLastStep()?.SetAudioPitch(pitchMinMax); return seq; }
-		public static AnimSequencer SetAudioPitch(this AnimSequencer sequencer, Vector2 pitchMinMax) { sequencer.GetLastSequence()?.SetAudioPitch(pitchMinMax); return sequencer; }
-		public static AnimSequencer SetAudioPitch(this AnimSequencer sequencer, string seqLabel, Vector2 pitchMinMax) { sequencer.GetSequence(seqLabel)?.SetAudioPitch(pitchMinMax); return sequencer; }
-		public static AnimSequencer SetAudioPitch(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector2 pitchMinMax) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetAudioPitch(pitchMinMax); return sequencer; }
-		public static AnimSequencer SetAudioPitch(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector2 pitchMinMax) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetAudioPitch(pitchMinMax); return sequencer; }
-
-		// --- Shake Strength ---
-		public static AnimSequencer.AnimStep SetShakeStrength(this AnimSequencer.AnimStep s, Vector3 strength) { if (s != null) { s.shakeStrength = strength; } return s; }
-		public static AnimSequencer.AnimSequence SetShakeStrength(this AnimSequencer.AnimSequence seq, Vector3 strength) { seq.GetLastStep()?.SetShakeStrength(strength); return seq; }
-		public static AnimSequencer SetShakeStrength(this AnimSequencer sequencer, Vector3 strength) { sequencer.GetLastSequence()?.SetShakeStrength(strength); return sequencer; }
-		public static AnimSequencer SetShakeStrength(this AnimSequencer sequencer, string seqLabel, Vector3 strength) { sequencer.GetSequence(seqLabel)?.SetShakeStrength(strength); return sequencer; }
-		public static AnimSequencer SetShakeStrength(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector3 strength) { sequencer.GetSequence(seqLabel)?.FindStep(stepTag)?.SetShakeStrength(strength); return sequencer; }
-		public static AnimSequencer SetShakeStrength(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector3 strength) { sequencer.GetSequence(seqLabel)?.FindStep(stepIndex)?.SetShakeStrength(strength); return sequencer; }
+		#region Ease
+		public static AnimSequencer.AnimSequence SetEase(this AnimSequencer.AnimSequence seq, int index, Ease ease) {
+			ApplyToStep(seq, index, s => s.ease = ease, "Ease");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetEase(this AnimSequencer.AnimSequence seq, string tag, Ease ease) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetEase(index, ease);
+		}
+		public static AnimSequencer SetEase(this AnimSequencer sequencer, string seqLabel, int stepIndex, Ease ease) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetEase(stepIndex, ease));
+		}
+		public static AnimSequencer SetEase(this AnimSequencer sequencer, string seqLabel, string stepTag, Ease ease) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetEase(stepTag, ease));
+		}
 		#endregion
+
+		#region Target
+		public static AnimSequencer.AnimSequence SetTarget(this AnimSequencer.AnimSequence seq, int index, Transform target) {
+			ApplyToStep(seq, index, s => {
+				s.target = target;
+				s.isInitialized = false;
+			}, "Target");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetTarget(this AnimSequencer.AnimSequence seq, string tag, Transform target) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetTarget(index, target);
+		}
+		public static AnimSequencer SetTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, Transform target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTarget(stepIndex, target));
+		}
+		public static AnimSequencer SetTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, Transform target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTarget(stepTag, target));
+		}
+		#endregion
+
+		#region FadeAlpha
+		public static AnimSequencer.AnimSequence SetFadeAlpha(this AnimSequencer.AnimSequence seq, int index, float alpha) {
+			ApplyToStep(seq, index, s => s.setFadeValue = alpha, "FadeAlpha");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetFadeAlpha(this AnimSequencer.AnimSequence seq, string tag, float alpha) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetFadeAlpha(index, alpha);
+		}
+		public static AnimSequencer SetFadeAlpha(this AnimSequencer sequencer, string seqLabel, int stepIndex, float alpha) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetFadeAlpha(stepIndex, alpha));
+		}
+		public static AnimSequencer SetFadeAlpha(this AnimSequencer sequencer, string seqLabel, string stepTag, float alpha) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetFadeAlpha(stepTag, alpha));
+		}
+		#endregion
+
+		#region ScaleTo
+		public static AnimSequencer.AnimSequence SetScaleTo(this AnimSequencer.AnimSequence seq, int index, Vector3 scale) {
+			ApplyToStep(seq, index, s => {
+				s.scaleTo = scale;
+				s.scaleTo3D = scale;
+			}, "ScaleTo");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetScaleTo(this AnimSequencer.AnimSequence seq, string tag, Vector3 scale) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetScaleTo(index, scale);
+		}
+		public static AnimSequencer SetScaleTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector3 scale) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetScaleTo(stepIndex, scale));
+		}
+		public static AnimSequencer SetScaleTo(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector3 scale) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetScaleTo(stepTag, scale));
+		}
+		#endregion
+
+		#region SlideTo
+		public static AnimSequencer.AnimSequence SetSlideTo(this AnimSequencer.AnimSequence seq, int index, Vector2 slide) {
+			ApplyToStep(seq, index, s => s.slideTo = slide, "SlideTo");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetSlideTo(this AnimSequencer.AnimSequence seq, string tag, Vector2 slide) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetSlideTo(index, slide);
+		}
+		public static AnimSequencer SetSlideTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector2 slide) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSlideTo(stepIndex, slide));
+		}
+		public static AnimSequencer SetSlideTo(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector2 slide) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSlideTo(stepTag, slide));
+		}
+		#endregion
+
+		#region RotateTo
+		public static AnimSequencer.AnimSequence SetRotateTo(this AnimSequencer.AnimSequence seq, int index, float rotation) {
+			ApplyToStep(seq, index, s => s.rotateTo = rotation, "RotateTo");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetRotateTo(this AnimSequencer.AnimSequence seq, string tag, float rotation) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetRotateTo(index, rotation);
+		}
+		public static AnimSequencer SetRotateTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, float rotation) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetRotateTo(stepIndex, rotation));
+		}
+		public static AnimSequencer SetRotateTo(this AnimSequencer sequencer, string seqLabel, string stepTag, float rotation) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetRotateTo(stepTag, rotation));
+		}
+		#endregion
+
+		#region SizeDeltaTo
+		public static AnimSequencer.AnimSequence SetSizeDeltaTo(this AnimSequencer.AnimSequence seq, int index, Vector2 size) {
+			ApplyToStep(seq, index, s => s.sizeDeltaTo = size, "SizeDeltaTo");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetSizeDeltaTo(this AnimSequencer.AnimSequence seq, string tag, Vector2 size) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetSizeDeltaTo(index, size);
+		}
+		public static AnimSequencer SetSizeDeltaTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector2 size) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSizeDeltaTo(stepIndex, size));
+		}
+		public static AnimSequencer SetSizeDeltaTo(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector2 size) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSizeDeltaTo(stepTag, size));
+		}
+		#endregion
+
+		#region FillAmountTo
+		public static AnimSequencer.AnimSequence SetFillAmountTo(this AnimSequencer.AnimSequence seq, int index, float amount) {
+			ApplyToStep(seq, index, s => s.fillAmountTo = amount, "FillAmountTo");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetFillAmountTo(this AnimSequencer.AnimSequence seq, string tag, float amount) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetFillAmountTo(index, amount);
+		}
+		public static AnimSequencer SetFillAmountTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, float amount) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetFillAmountTo(stepIndex, amount));
+		}
+		public static AnimSequencer SetFillAmountTo(this AnimSequencer sequencer, string seqLabel, string stepTag, float amount) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetFillAmountTo(stepTag, amount));
+		}
+		#endregion
+
+		#region ColorTo
+		public static AnimSequencer.AnimSequence SetColorTo(this AnimSequencer.AnimSequence seq, int index, Color color) {
+			ApplyToStep(seq, index, s => s.colorTo = color, "ColorTo");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetColorTo(this AnimSequencer.AnimSequence seq, string tag, Color color) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetColorTo(index, color);
+		}
+		public static AnimSequencer SetColorTo(this AnimSequencer sequencer, string seqLabel, int stepIndex, Color color) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetColorTo(stepIndex, color));
+		}
+		public static AnimSequencer SetColorTo(this AnimSequencer sequencer, string seqLabel, string stepTag, Color color) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetColorTo(stepTag, color));
+		}
+		#endregion
+
+		#region ColorColor Alias
+		public static AnimSequencer.AnimSequence SetColorColor(this AnimSequencer.AnimSequence seq, int index, Color color) {
+			return seq.SetColorTo(index, color);
+		}
+		public static AnimSequencer.AnimSequence SetColorColor(this AnimSequencer.AnimSequence seq, string tag, Color color) {
+			return seq.SetColorTo(tag, color);
+		}
+		public static AnimSequencer SetColorColor(this AnimSequencer sequencer, string seqLabel, int stepIndex, Color color) {
+			return sequencer.SetColorTo(seqLabel, stepIndex, color);
+		}
+		public static AnimSequencer SetColorColor(this AnimSequencer sequencer, string seqLabel, string stepTag, Color color) {
+			return sequencer.SetColorTo(seqLabel, stepTag, color);
+		}
+		#endregion
+
+		#region Active
+		public static AnimSequencer.AnimSequence SetActive(this AnimSequencer.AnimSequence seq, int index, bool isActive) {
+			ApplyToStep(seq, index, s => s.setActiveValue = isActive, "Active");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetActive(this AnimSequencer.AnimSequence seq, string tag, bool isActive) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetActive(index, isActive);
+		}
+		public static AnimSequencer SetActive(this AnimSequencer sequencer, string seqLabel, int stepIndex, bool isActive) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetActive(stepIndex, isActive));
+		}
+		public static AnimSequencer SetActive(this AnimSequencer sequencer, string seqLabel, string stepTag, bool isActive) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetActive(stepTag, isActive));
+		}
+		#endregion
+
+		#region Sprite
+		public static AnimSequencer.AnimSequence SetSprite(this AnimSequencer.AnimSequence seq, int index, Sprite sprite) {
+			ApplyToStep(seq, index, s => s.setSpriteValue = sprite, "Sprite");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetSprite(this AnimSequencer.AnimSequence seq, string tag, Sprite sprite) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetSprite(index, sprite);
+		}
+		public static AnimSequencer SetSprite(this AnimSequencer sequencer, string seqLabel, int stepIndex, Sprite sprite) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSprite(stepIndex, sprite));
+		}
+		public static AnimSequencer SetSprite(this AnimSequencer sequencer, string seqLabel, string stepTag, Sprite sprite) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSprite(stepTag, sprite));
+		}
+		#endregion
+
+		#region ImageSprite Alias
+		public static AnimSequencer.AnimSequence SetImageSprite(this AnimSequencer.AnimSequence seq, int index, Sprite sprite) {
+			return seq.SetSprite(index, sprite);
+		}
+		public static AnimSequencer.AnimSequence SetImageSprite(this AnimSequencer.AnimSequence seq, string tag, Sprite sprite) {
+			return seq.SetSprite(tag, sprite);
+		}
+		public static AnimSequencer SetImageSprite(this AnimSequencer sequencer, string seqLabel, int stepIndex, Sprite sprite) {
+			return sequencer.SetSprite(seqLabel, stepIndex, sprite);
+		}
+		public static AnimSequencer SetImageSprite(this AnimSequencer sequencer, string seqLabel, string stepTag, Sprite sprite) {
+			return sequencer.SetSprite(seqLabel, stepTag, sprite);
+		}
+		#endregion
+
+		#region Text
+		public static AnimSequencer.AnimSequence SetText(this AnimSequencer.AnimSequence seq, int index, string text) {
+			ApplyToStep(seq, index, s => s.setTextValue = text, "Text");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetText(this AnimSequencer.AnimSequence seq, string tag, string text) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetText(index, text);
+		}
+		public static AnimSequencer SetText(this AnimSequencer sequencer, string seqLabel, int stepIndex, string text) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetText(stepIndex, text));
+		}
+		public static AnimSequencer SetText(this AnimSequencer sequencer, string seqLabel, string stepTag, string text) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetText(stepTag, text));
+		}
+		#endregion
+
+		#region TypeWriterText Alias
+		public static AnimSequencer.AnimSequence SetTypeWriterText(this AnimSequencer.AnimSequence seq, int index, string text) {
+			return seq.SetText(index, text);
+		}
+		public static AnimSequencer.AnimSequence SetTypeWriterText(this AnimSequencer.AnimSequence seq, string tag, string text) {
+			return seq.SetText(tag, text);
+		}
+		public static AnimSequencer SetTypeWriterText(this AnimSequencer sequencer, string seqLabel, int stepIndex, string text) {
+			return sequencer.SetText(seqLabel, stepIndex, text);
+		}
+		public static AnimSequencer SetTypeWriterText(this AnimSequencer sequencer, string seqLabel, string stepTag, string text) {
+			return sequencer.SetText(seqLabel, stepTag, text);
+		}
+		#endregion
+
+		#region TextCounterTarget To Only
+		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, int index, float to) {
+			ApplyToStep(seq, index, s => {
+				s.animateFromCurrent = true;
+				s.textCounterTo = to;
+			}, "TextCounterTarget To");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, string tag, float to) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetTextCounterTarget(index, to);
+		}
+		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, float to) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTextCounterTarget(stepIndex, to));
+		}
+		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, float to) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTextCounterTarget(stepTag, to));
+		}
+		#endregion
+
+		#region TextCounterTarget From To
+		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, int index, float from, float to) {
+			ApplyToStep(seq, index, s => {
+				s.animateFromCurrent = false;
+				s.textCounterFrom = from;
+				s.textCounterTo = to;
+			}, "TextCounterTarget From To");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetTextCounterTarget(this AnimSequencer.AnimSequence seq, string tag, float from, float to) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetTextCounterTarget(index, from, to);
+		}
+		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, float from, float to) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTextCounterTarget(stepIndex, from, to));
+		}
+		public static AnimSequencer SetTextCounterTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, float from, float to) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTextCounterTarget(stepTag, from, to));
+		}
+		#endregion
+
+		#region WaitMethod
+		public static AnimSequencer.AnimSequence SetWaitMethod(this AnimSequencer.AnimSequence seq, int index, WaitMethod method) {
+			ApplyToStep(seq, index, s => s.waitMethod = method, "WaitMethod");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetWaitMethod(this AnimSequencer.AnimSequence seq, string tag, WaitMethod method) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetWaitMethod(index, method);
+		}
+		public static AnimSequencer SetWaitMethod(this AnimSequencer sequencer, string seqLabel, int stepIndex, WaitMethod method) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetWaitMethod(stepIndex, method));
+		}
+		public static AnimSequencer SetWaitMethod(this AnimSequencer sequencer, string seqLabel, string stepTag, WaitMethod method) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetWaitMethod(stepTag, method));
+		}
+		#endregion
+
+		#region Condition
+		public static AnimSequencer.AnimSequence SetCondition(this AnimSequencer.AnimSequence seq, int index, System.Func<bool> condition) {
+			ApplyToStep(seq, index, s => s.waitConditionLambda = condition, "Condition");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetCondition(this AnimSequencer.AnimSequence seq, string tag, System.Func<bool> condition) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetCondition(index, condition);
+		}
+		public static AnimSequencer SetCondition(this AnimSequencer sequencer, string seqLabel, int stepIndex, System.Func<bool> condition) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetCondition(stepIndex, condition));
+		}
+		public static AnimSequencer SetCondition(this AnimSequencer sequencer, string seqLabel, string stepTag, System.Func<bool> condition) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetCondition(stepTag, condition));
+		}
+		#endregion
+
+		#region TimeScale
+		public static AnimSequencer.AnimSequence SetTimeScale(this AnimSequencer.AnimSequence seq, int index, float timeScale) {
+			ApplyToStep(seq, index, s => s.timeScaleTo = timeScale, "TimeScale");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetTimeScale(this AnimSequencer.AnimSequence seq, string tag, float timeScale) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetTimeScale(index, timeScale);
+		}
+		public static AnimSequencer SetTimeScale(this AnimSequencer sequencer, string seqLabel, int stepIndex, float timeScale) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTimeScale(stepIndex, timeScale));
+		}
+		public static AnimSequencer SetTimeScale(this AnimSequencer sequencer, string seqLabel, string stepTag, float timeScale) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTimeScale(stepTag, timeScale));
+		}
+		#endregion
+
+		#region TriggerSequence
+		public static AnimSequencer.AnimSequence SetTriggerSequence(this AnimSequencer.AnimSequence seq, int index, string sequenceLabel) {
+			ApplyToStep(seq, index, s => s.triggerSequenceLabel = sequenceLabel, "TriggerSequence");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetTriggerSequence(this AnimSequencer.AnimSequence seq, string tag, string sequenceLabel) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetTriggerSequence(index, sequenceLabel);
+		}
+		public static AnimSequencer SetTriggerSequence(this AnimSequencer sequencer, string seqLabel, int stepIndex, string sequenceLabel) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTriggerSequence(stepIndex, sequenceLabel));
+		}
+		public static AnimSequencer SetTriggerSequence(this AnimSequencer sequencer, string seqLabel, string stepTag, string sequenceLabel) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetTriggerSequence(stepTag, sequenceLabel));
+		}
+		#endregion
+
+		#region MaterialFloat
+		public static AnimSequencer.AnimSequence SetMaterialFloat(this AnimSequencer.AnimSequence seq, int index, float value) {
+			ApplyToStep(seq, index, s => s.materialFloatTo = value, "MaterialFloat");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetMaterialFloat(this AnimSequencer.AnimSequence seq, string tag, float value) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetMaterialFloat(index, value);
+		}
+		public static AnimSequencer SetMaterialFloat(this AnimSequencer sequencer, string seqLabel, int stepIndex, float value) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialFloat(stepIndex, value));
+		}
+		public static AnimSequencer SetMaterialFloat(this AnimSequencer sequencer, string seqLabel, string stepTag, float value) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialFloat(stepTag, value));
+		}
+		#endregion
+
+		#region MaterialColor
+		public static AnimSequencer.AnimSequence SetMaterialColor(this AnimSequencer.AnimSequence seq, int index, Color color) {
+			ApplyToStep(seq, index, s => s.materialColorTo = color, "MaterialColor");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetMaterialColor(this AnimSequencer.AnimSequence seq, string tag, Color color) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetMaterialColor(index, color);
+		}
+		public static AnimSequencer SetMaterialColor(this AnimSequencer sequencer, string seqLabel, int stepIndex, Color color) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialColor(stepIndex, color));
+		}
+		public static AnimSequencer SetMaterialColor(this AnimSequencer sequencer, string seqLabel, string stepTag, Color color) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialColor(stepTag, color));
+		}
+		#endregion
+
+		#region AudioVolume
+		public static AnimSequencer.AnimSequence SetAudioVolume(this AnimSequencer.AnimSequence seq, int index, Vector2 volumeMinMax) {
+			ApplyToStep(seq, index, s => s.audioVolume = volumeMinMax, "AudioVolume");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetAudioVolume(this AnimSequencer.AnimSequence seq, string tag, Vector2 volumeMinMax) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetAudioVolume(index, volumeMinMax);
+		}
+		public static AnimSequencer SetAudioVolume(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector2 volumeMinMax) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetAudioVolume(stepIndex, volumeMinMax));
+		}
+		public static AnimSequencer SetAudioVolume(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector2 volumeMinMax) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetAudioVolume(stepTag, volumeMinMax));
+		}
+		#endregion
+
+		#region AudioPitch
+		public static AnimSequencer.AnimSequence SetAudioPitch(this AnimSequencer.AnimSequence seq, int index, Vector2 pitchMinMax) {
+			ApplyToStep(seq, index, s => s.audioPitch = pitchMinMax, "AudioPitch");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetAudioPitch(this AnimSequencer.AnimSequence seq, string tag, Vector2 pitchMinMax) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetAudioPitch(index, pitchMinMax);
+		}
+		public static AnimSequencer SetAudioPitch(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector2 pitchMinMax) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetAudioPitch(stepIndex, pitchMinMax));
+		}
+		public static AnimSequencer SetAudioPitch(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector2 pitchMinMax) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetAudioPitch(stepTag, pitchMinMax));
+		}
+		#endregion
+
+		#region ShakeStrength
+		public static AnimSequencer.AnimSequence SetShakeStrength(this AnimSequencer.AnimSequence seq, int index, Vector3 strength) {
+			ApplyToStep(seq, index, s => s.shakeStrength = strength, "ShakeStrength");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetShakeStrength(this AnimSequencer.AnimSequence seq, string tag, Vector3 strength) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetShakeStrength(index, strength);
+		}
+		public static AnimSequencer SetShakeStrength(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector3 strength) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetShakeStrength(stepIndex, strength));
+		}
+		public static AnimSequencer SetShakeStrength(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector3 strength) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetShakeStrength(stepTag, strength));
+		}
+		#endregion
+
 	}
 }
