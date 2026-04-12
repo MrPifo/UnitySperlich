@@ -18,30 +18,43 @@ namespace Sperlich.Sequencer {
 	}
 
 	public enum AnimType {
-		Fade = 0,
-		Scale = 1,
-		Slide = 2,
-		Rotate = 3,
-		PunchRotate = 4,
+		Anchor = 20,
 		Bounce = 5,
 		ColorTint = 6,
-		PunchScale = 7,
-		TypeWriter = 8,
-		TextCounter = 9,
-		SetTransform = 10,
-		Wait = 11,
-		SetText = 12,
-		SetColor = 13,
-		SetActive = 14,
-		Trigger = 15,
 		Event = 16,
-		SetSprite = 17,
+		Fade = 0,
+		FadeAudio = 30,
 		FadeSpriteColor = 18,
-		SetImage = 19,
-		Anchor = 20,
+		FillAmount = 26,
+		MaterialColor = 35,
+		MaterialFloat = 33,
+		PlayAudio = 29,
+		PunchRotate = 4,
+		PunchScale = 7,
 		Repeat = 21,
-		WaitUntil = 22,
-		SetFade = 23
+		Rotate = 3,
+		Scale = 1,
+		SetActive = 14,
+		SetCanvasGroupState = 28,
+		SetColor = 13,
+		SetFade = 23,
+		SetImage = 19,
+		SetMaterialColor = 36,
+		SetMaterialFloat = 34,
+		SetSprite = 17,
+		SetText = 12,
+		SetTimeScale = 32,
+		SetTransform = 10,
+		ShakePosition = 24,
+		ShakeRotation = 25,
+		SizeDelta = 27,
+		Slide = 2,
+		TextCounter = 9,
+		TimeScale = 31,
+		Trigger = 15,
+		TypeWriter = 8,
+		Wait = 11,
+		WaitUntil = 22
 	}
 
 	public enum WaitMethod {
@@ -58,5 +71,11 @@ namespace Sperlich.Sequencer {
 		LocalPosition = 0,
 		LocalRotation = 1,
 		LocalScale = 2
+	}
+
+	public enum OptionalBool {
+		Unchanged = 0,
+		True = 1,
+		False = 2
 	}
 }
