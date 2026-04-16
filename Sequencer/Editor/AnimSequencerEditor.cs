@@ -200,7 +200,7 @@ namespace Sperlich.Sequencer.Editor {
 		}
 
 		VisualElement BuildStepElement(int seqIndex, int stepIndex, System.Action rebuild) {
-			var seq = _sequencer.sequences[seqIndex]; var step = seq.steps[stepIndex]; Color typeColor = GetAnimTypeColor(step.type);
+			var seq = _sequencer.sequences[seqIndex]; var step = seq.steps[stepIndex]; Color typeColor = GetAnimTypeColor(step);
 			var stepBox = CreateBox(3, new Color(0.28f, 0.28f, 0.28f)); stepBox.style.marginBottom = 4;
 			var (stepHeader, colorBar, arrowLabel, infoLabel, tagLabel, modeEl, iconLabel, warningIcon) = MakeStepHeader(step, seqIndex, stepIndex, typeColor, seq, rebuild);
 			stepBox.Add(stepHeader); stepBox.Add(MakeProgressBar(seqIndex, stepIndex, typeColor));
@@ -227,7 +227,7 @@ namespace Sperlich.Sequencer.Editor {
 			var enableToggle = new Toggle { value = step.enabled, style = { marginRight = 6 } }; enableToggle.RegisterCallback<ClickEvent>(evt => evt.StopPropagation());
 			void ApplyCheckmarkStyle(bool isChecked) { var c = enableToggle.Q<VisualElement>(className: "unity-toggle__checkmark"); if (c != null) { c.style.backgroundColor = new StyleColor(new Color(0.12f, 0.13f, 0.16f)); c.style.borderTopColor = new StyleColor(ButtonBorder); c.style.borderBottomColor = new StyleColor(ButtonBorder); c.style.borderLeftColor = new StyleColor(ButtonBorder); c.style.borderRightColor = new StyleColor(ButtonBorder); if (isChecked) c.style.unityBackgroundImageTintColor = new StyleColor(Color.white); } }
 			enableToggle.schedule.Execute(() => ApplyCheckmarkStyle(enableToggle.value));
-			enableToggle.RegisterValueChangedCallback(evt => { Undo.RecordObject(_sequencer, "Toggle Step Enabled"); step.enabled = evt.newValue; colorBar.style.backgroundColor = new StyleColor(step.enabled ? GetAnimTypeColor(step.type) : new Color(0.4f, 0.4f, 0.4f)); ApplyCheckmarkStyle(evt.newValue); EditorUtility.SetDirty(_sequencer); });
+			enableToggle.RegisterValueChangedCallback(evt => { Undo.RecordObject(_sequencer, "Toggle Step Enabled"); step.enabled = evt.newValue; colorBar.style.backgroundColor = new StyleColor(step.enabled ? GetAnimTypeColor(step) : new Color(0.4f, 0.4f, 0.4f)); ApplyCheckmarkStyle(evt.newValue); EditorUtility.SetDirty(_sequencer); });
 			var modeEl = new Label(step.mode == StepMode.Sequential ? "SEQ" : "PAR") { style = { color = new StyleColor(step.mode == StepMode.Sequential ? ColorSeq : ColorPar), unityFontStyleAndWeight = FontStyle.Bold, fontSize = 10, width = 28, display = IsModeHidden(step.type) ? DisplayStyle.None : DisplayStyle.Flex } };
 			var info = new Label(BuildStepTypeInfo(step)) { enableRichText = true, style = { fontSize = 11, flexGrow = 1, color = new StyleColor(step.enabled ? new Color(0.8f, 0.8f, 0.8f) : new Color(0.5f, 0.5f, 0.5f)) } };
 			var tagLabel = new Label(string.IsNullOrEmpty(step.tag) ? "" : $"[{step.tag}]") { style = { fontSize = 11, color = new StyleColor(new Color(0.75f, 0.75f, 0.75f)), marginRight = 4, display = string.IsNullOrEmpty(step.tag) ? DisplayStyle.None : DisplayStyle.Flex } };
@@ -255,8 +255,8 @@ namespace Sperlich.Sequencer.Editor {
 		List<string> GetValidAnimTypes(bool isUI) {
 			var valid = new List<string>();
 			foreach (AnimType t in System.Enum.GetValues(typeof(AnimType))) {
-				bool uiOnly = t == AnimType.Fade || t == AnimType.SetFade || t == AnimType.ColorTint || t == AnimType.SetColor || t == AnimType.TypeWriter || t == AnimType.TextCounter || t == AnimType.SetText || t == AnimType.SetImage || t == AnimType.FillAmount || t == AnimType.SizeDelta || t == AnimType.SetCanvasGroupState;
-				bool worldOnly = t == AnimType.SetSprite || t == AnimType.FadeSpriteColor;
+				bool uiOnly = t == AnimType.Fade || t == AnimType.ColorTint || t == AnimType.TypeWriter || t == AnimType.TextCounter || t == AnimType.FillAmount || t == AnimType.SizeDelta;
+				bool worldOnly = t == AnimType.FadeSpriteColor;
 				if (isUI && !worldOnly) valid.Add(t.ToString());
 				else if (!isUI && !uiOnly) valid.Add(t.ToString());
 			}
@@ -265,12 +265,23 @@ namespace Sperlich.Sequencer.Editor {
 
 		void BuildStepBody(VisualElement body, int seqIndex, int stepIndex, VisualElement colorBar, Label infoLabel, Label tagLabel, Label modeEl, Label iconLabel, Image warningIcon, AnimStep step) {
 			var stepProp = GetStepProp(seqIndex, stepIndex);
+
 			bool GetCurrentIsUI() { var t = stepProp.FindPropertyRelative("target").objectReferenceValue as Transform; return t != null ? t is RectTransform : IsSequencerUI(); }
 
 			var tagField = new PropertyField(stepProp.FindPropertyRelative("tag"), "Tag"); tagField.Bind(serializedObject);
 			tagField.RegisterValueChangeCallback(_ => { tagLabel.text = string.IsNullOrEmpty(step.tag) ? "" : $"[{step.tag}]"; tagLabel.style.display = string.IsNullOrEmpty(step.tag) ? DisplayStyle.None : DisplayStyle.Flex; }); body.Add(tagField);
 
 			var modeField = new PropertyField(stepProp.FindPropertyRelative("mode"), "Mode") { name = "modeField", style = { display = IsModeHidden(step.type) ? DisplayStyle.None : DisplayStyle.Flex } }; modeField.Bind(serializedObject); body.Add(modeField);
+
+			bool currentIsUI = GetCurrentIsUI(); var validChoices = GetValidAnimTypes(currentIsUI);
+			string currentTypeStr = step.type.ToString(); if (!validChoices.Contains(currentTypeStr)) validChoices.Add(currentTypeStr);
+
+			var typeDropdown = new DropdownField("Type", validChoices, currentTypeStr); typeDropdown.AddToClassList("unity-base-field"); typeDropdown.AddToClassList("unity-base-field__aligned");
+			body.Add(typeDropdown);
+
+			// Sub-Dropdown Container directly below Type
+			var subTypeContainer = new VisualElement();
+			body.Add(subTypeContainer);
 
 			var typeFieldsContainer = new VisualElement();
 			var contextWarning = new HelpBox("", HelpBoxMessageType.Error) { style = { display = DisplayStyle.None } };
@@ -279,7 +290,7 @@ namespace Sperlich.Sequencer.Editor {
 				if (step == null) return;
 				bool isUI = GetCurrentIsUI(); bool isCompatible = true; string msg = ""; HelpBoxMessageType msgType = HelpBoxMessageType.Error;
 
-				if (!isUI && (step.type == AnimType.Fade || step.type == AnimType.SetFade || step.type == AnimType.ColorTint || step.type == AnimType.SetColor || step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || step.type == AnimType.SetText || step.type == AnimType.SetImage || step.type == AnimType.FillAmount || step.type == AnimType.SizeDelta || step.type == AnimType.SetCanvasGroupState)) { isCompatible = false; msg = $"Type '{step.type}' is strictly for UI elements."; } else if (isUI && (step.type == AnimType.SetSprite || step.type == AnimType.FadeSpriteColor)) { isCompatible = false; msg = $"Type '{step.type}' is for World 2D Sprites only."; }
+				if (!isUI && (step.type == AnimType.Fade || step.type == AnimType.ColorTint || step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || step.type == AnimType.FillAmount || step.type == AnimType.SizeDelta || (step.type == AnimType.SetProperty && (step.setPropertyType == SetPropertyType.Fade || step.setPropertyType == SetPropertyType.Color || step.setPropertyType == SetPropertyType.Text || step.setPropertyType == SetPropertyType.Image || step.setPropertyType == SetPropertyType.CanvasGroupState || step.setPropertyType == SetPropertyType.SizeDelta || step.setPropertyType == SetPropertyType.Pivot)))) { isCompatible = false; msg = $"Type '{step.type}' is strictly for UI elements."; } else if (isUI && (step.type == AnimType.FadeSpriteColor || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Sprite))) { isCompatible = false; msg = $"Type '{step.type}' is for World 2D Sprites only."; }
 
 				if (isCompatible && step.type == AnimType.Repeat) {
 					if (!_sequencer.sequences[seqIndex].steps.Exists(s => s.type == AnimType.Anchor && s.anchorLabel == step.repeatAnchorLabel)) { isCompatible = false; msg = $"Target Anchor '#{step.repeatAnchorLabel}' does not exist."; }
@@ -289,7 +300,12 @@ namespace Sperlich.Sequencer.Editor {
 					Transform effTarget = (stepProp.FindPropertyRelative("target").objectReferenceValue as Transform) ?? _sequencer.transform;
 					bool missing = false; string comp = "";
 					if (effTarget != null) {
-						if ((step.type == AnimType.Fade || step.type == AnimType.SetFade || step.type == AnimType.SetCanvasGroupState) && isUI && effTarget.GetComponent<CanvasGroup>() == null) { missing = true; comp = "CanvasGroup"; } else if ((step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || step.type == AnimType.SetText) && stepProp.FindPropertyRelative("tmpTarget").objectReferenceValue == null && effTarget.GetComponent<TMP_Text>() == null) { missing = true; comp = "TMP_Text"; } else if ((step.type == AnimType.SetSprite || step.type == AnimType.FadeSpriteColor) && stepProp.FindPropertyRelative("spriteTarget").objectReferenceValue == null && effTarget.GetComponent<SpriteRenderer>() == null) { missing = true; comp = "SpriteRenderer"; } else if ((step.type == AnimType.SetImage || step.type == AnimType.FillAmount) && stepProp.FindPropertyRelative("imageTarget").objectReferenceValue == null && effTarget.GetComponent<Image>() == null) { missing = true; comp = "Image"; } else if ((step.type == AnimType.ColorTint || step.type == AnimType.SetColor) && effTarget.GetComponent<UnityEngine.UI.Graphic>() == null) { missing = true; comp = "Graphic (Image or Text)"; } else if ((step.type == AnimType.PlayAudio || step.type == AnimType.FadeAudio) && stepProp.FindPropertyRelative("audioTarget").objectReferenceValue == null && effTarget.GetComponent<AudioSource>() == null) { missing = true; comp = "AudioSource"; } else if ((step.type == AnimType.MaterialFloat || step.type == AnimType.MaterialColor || step.type == AnimType.SetMaterialFloat || step.type == AnimType.SetMaterialColor) && stepProp.FindPropertyRelative("rendererTarget").objectReferenceValue == null && effTarget.GetComponent<Renderer>() == null) { missing = true; comp = "Renderer"; }
+						if ((step.type == AnimType.Fade || (step.type == AnimType.SetProperty && (step.setPropertyType == SetPropertyType.Fade || step.setPropertyType == SetPropertyType.CanvasGroupState))) && isUI && effTarget.GetComponent<CanvasGroup>() == null) { missing = true; comp = "CanvasGroup"; } else if ((step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Text)) && stepProp.FindPropertyRelative("tmpTarget").objectReferenceValue == null && effTarget.GetComponent<TMP_Text>() == null) { missing = true; comp = "TMP_Text"; } else if ((step.type == AnimType.FadeSpriteColor || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Sprite)) && stepProp.FindPropertyRelative("spriteTarget").objectReferenceValue == null && effTarget.GetComponent<SpriteRenderer>() == null) { missing = true; comp = "SpriteRenderer"; } else if ((step.type == AnimType.FillAmount || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Image)) && stepProp.FindPropertyRelative("imageTarget").objectReferenceValue == null && effTarget.GetComponent<Image>() == null) { missing = true; comp = "Image"; } else if ((step.type == AnimType.ColorTint || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Color)) && effTarget.GetComponent<UnityEngine.UI.Graphic>() == null) { missing = true; comp = "Graphic (Image or Text)"; } else if ((step.type == AnimType.PlayAudio || step.type == AnimType.FadeAudio) && stepProp.FindPropertyRelative("audioTarget").objectReferenceValue == null && effTarget.GetComponent<AudioSource>() == null) { missing = true; comp = "AudioSource"; } else if ((step.type == AnimType.MaterialProperty || step.type == AnimType.SetMaterialProperty) &&
+																																																																																																																																																																																																																																																																																																																																																																																																																																																			stepProp.FindPropertyRelative("materialTarget").objectReferenceValue == null &&
+																																																																																																																																																																																																																																																																																																																																																																																																																																																			stepProp.FindPropertyRelative("rendererTarget").objectReferenceValue == null &&
+																																																																																																																																																																																																																																																																																																																																																																																																																																																			stepProp.FindPropertyRelative("graphicTarget").objectReferenceValue == null &&
+																																																																																																																																																																																																																																																																																																																																																																																																																																																			effTarget.GetComponent<Renderer>() == null &&
+																																																																																																																																																																																																																																																																																																																																																																																																																																																			effTarget.GetComponent<UnityEngine.UI.Graphic>() == null) { missing = true; comp = "Material, Renderer or UI Graphic"; }
 					}
 					if (missing) { isCompatible = false; msg = $"Missing Component: Needs a {comp} component!"; msgType = HelpBoxMessageType.Warning; }
 				}
@@ -301,19 +317,25 @@ namespace Sperlich.Sequencer.Editor {
 				} else { contextWarning.style.display = DisplayStyle.None; warningIcon.style.display = DisplayStyle.None; }
 			}
 
-			bool currentIsUI = GetCurrentIsUI(); var validChoices = GetValidAnimTypes(currentIsUI);
-			string currentTypeStr = step.type.ToString(); if (!validChoices.Contains(currentTypeStr)) validChoices.Add(currentTypeStr);
-
-			var typeDropdown = new DropdownField("Type", validChoices, currentTypeStr); typeDropdown.AddToClassList("unity-base-field"); typeDropdown.AddToClassList("unity-base-field__aligned");
 			typeDropdown.RegisterValueChangedCallback(evt => {
 				if (System.Enum.TryParse<AnimType>(evt.newValue, out var newType)) {
-					Undo.RecordObject(_sequencer, "Change Step Type"); step.type = newType; stepProp.FindPropertyRelative("type").enumValueIndex = (int)newType; serializedObject.ApplyModifiedProperties();
-					colorBar.style.backgroundColor = new StyleColor(step.enabled ? GetAnimTypeColor(step.type) : new Color(0.4f, 0.4f, 0.4f));
+					Undo.RecordObject(_sequencer, "Change Step Type");
+					step.type = newType;
+					stepProp.FindPropertyRelative("type").intValue = (int)newType;
+
+					// FIX: Rest-Daten ausmerzen, wenn zu Instant-Typ gewechselt wird
+					if (IsInstantType(newType)) {
+						//step.duration = 0f;
+						//stepProp.FindPropertyRelative("duration").floatValue = 0f;
+					}
+
+					serializedObject.ApplyModifiedProperties();
+					colorBar.style.backgroundColor = new StyleColor(step.enabled ? GetAnimTypeColor(step) : new Color(0.4f, 0.4f, 0.4f));
 					infoLabel.text = BuildStepTypeInfo(step); colorBar.parent.style.backgroundColor = new StyleColor(step.type == AnimType.Anchor ? new Color(ColorAnchor.r, ColorAnchor.g, ColorAnchor.b, 0.4f) : BgStep);
 					modeEl.style.display = IsModeHidden(step.type) ? DisplayStyle.None : DisplayStyle.Flex;
-					RefreshStepBodyVisibility(body, step); BuildTypeFields(typeFieldsContainer, seqIndex, stepIndex, infoLabel, body); UpdateContextWarning();
+					RefreshStepBodyVisibility(body, step); BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body); UpdateContextWarning();
 				}
-			}); body.Add(typeDropdown);
+			});
 
 			var durationField = MakeBoundField(stepProp.FindPropertyRelative("duration"), "Duration"); durationField.name = "durationField"; durationField.RegisterValueChangeCallback(evt => { step.duration = evt.changedProperty.floatValue; infoLabel.text = BuildStepTypeInfo(step); });
 			var delayField = MakeBoundField(stepProp.FindPropertyRelative("delay"), "Delay"); delayField.name = "delayField"; delayField.RegisterValueChangeCallback(evt => { step.delay = evt.changedProperty.floatValue; infoLabel.text = BuildStepTypeInfo(step); });
@@ -323,11 +345,11 @@ namespace Sperlich.Sequencer.Editor {
 			var targetField = MakeTargetField(stepProp.FindPropertyRelative("target"), "Target Transform"); targetField.name = "targetField"; targetField.RegisterValueChangeCallback(_ => {
 				bool newIsUI = GetCurrentIsUI(); var newChoices = GetValidAnimTypes(newIsUI); string typeStr = step.type.ToString();
 				if (!newChoices.Contains(typeStr)) newChoices.Add(typeStr); typeDropdown.choices = newChoices; typeDropdown.value = typeStr;
-				UpdateContextWarning(); BuildTypeFields(typeFieldsContainer, seqIndex, stepIndex, infoLabel, body);
+				UpdateContextWarning(); BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body);
 			});
 
 			body.Add(durationField); body.Add(delayField); body.Add(easeField); body.Add(customCurveField); body.Add(fromCurrentField); body.Add(targetField); body.Add(Spacer(4));
-			BuildTypeFields(typeFieldsContainer, seqIndex, stepIndex, infoLabel, body); body.Add(typeFieldsContainer);
+			BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body); body.Add(typeFieldsContainer);
 			UpdateContextWarning(); body.Add(Spacer(4)); body.Add(contextWarning); RefreshStepBodyVisibility(body, step);
 
 			body.schedule.Execute(() => {
@@ -343,7 +365,7 @@ namespace Sperlich.Sequencer.Editor {
 		void UpdateToLabelVisibility(VisualElement body, AnimStep step) { body.Query<PropertyField>("toField").ForEach(f => f.label = step.relativeOffset ? "To Offset" : "To"); body.Query<PropertyField>("fromField").ForEach(f => f.label = step.relativeOffset ? "From Offset" : "From"); }
 
 		void RefreshStepBodyVisibility(VisualElement body, AnimStep step) {
-			SetVisible(body, "durationField", !IsDurationHidden(step.type)); SetVisible(body, "delayField", !IsDelayHidden(step.type)); SetVisible(body, "easeField", !IsEaseHidden(step.type)); SetVisible(body, "customCurveField", !IsEaseHidden(step.type) && step.ease == PrimeTween.Ease.Custom); SetVisible(body, "fromCurrentField", !IsFromCurrentHidden(step)); SetVisible(body, "targetField", !IsTargetHidden(step.type)); SetVisible(body, "modeField", !IsModeHidden(step.type));
+			SetVisible(body, "durationField", !IsDurationHidden(step.type)); SetVisible(body, "delayField", !IsDelayHidden(step.type)); SetVisible(body, "easeField", !IsEaseHidden(step.type)); SetVisible(body, "customCurveField", !IsEaseHidden(step.type) && step.ease == PrimeTween.Ease.Custom); SetVisible(body, "fromCurrentField", !IsFromCurrentHidden(step)); SetVisible(body, "targetField", !IsTargetHidden(step)); SetVisible(body, "modeField", !IsModeHidden(step.type));
 			UpdateFromCurrentVisibility(body, step); UpdateToLabelVisibility(body, step);
 		}
 
@@ -352,16 +374,16 @@ namespace Sperlich.Sequencer.Editor {
 			relPill.onValueChanged += () => { RefreshStepBodyVisibility(body, step); infoLabel.text = BuildStepTypeInfo(step); }; return relRow;
 		}
 
-		void BuildTypeFields(VisualElement c, int seqIndex, int stepIndex, Label infoLabel, VisualElement body) {
-			c.Clear(); var step = _sequencer.sequences[seqIndex].steps[stepIndex]; var sp = GetStepProp(seqIndex, stepIndex); bool fc = step.animateFromCurrent; bool isUI = IsStepUI(step);
+		void BuildTypeFields(VisualElement c, VisualElement subTypeContainer, int seqIndex, int stepIndex, Label infoLabel, VisualElement body) {
+			c.Clear(); subTypeContainer.Clear(); var step = _sequencer.sequences[seqIndex].steps[stepIndex]; var sp = GetStepProp(seqIndex, stepIndex); bool fc = step.animateFromCurrent; bool isUI = IsStepUI(step);
 
-			void Add(SerializedProperty prop, string label, bool isFromField = false, bool isToField = false) {
+			void Add(SerializedProperty prop, string label, bool isFromField = false, bool isToField = false, VisualElement targetContainer = null) {
 				bool isRef = prop.propertyType == SerializedPropertyType.ObjectReference; string initLabel = isRef && prop.objectReferenceValue == null ? $"{label} [Self]" : label;
 				var f = new PropertyField(prop, initLabel); f.Bind(serializedObject);
 				if (isRef) f.RegisterValueChangeCallback(evt => f.label = evt.changedProperty.objectReferenceValue == null ? $"{label} [Self]" : label);
 				if (isFromField) { f.name = "fromField"; f.style.display = fc ? DisplayStyle.None : DisplayStyle.Flex; }
 				if (isToField) f.name = "toField";
-				c.Add(f);
+				(targetContainer ?? c).Add(f);
 			}
 
 			switch (step.type) {
@@ -373,29 +395,162 @@ namespace Sperlich.Sequencer.Editor {
 				case AnimType.FillAmount: Add(sp.FindPropertyRelative("imageTarget"), "Image Target"); Add(sp.FindPropertyRelative("fillAmountFrom"), "From", true); Add(sp.FindPropertyRelative("fillAmountTo"), "To"); break;
 				case AnimType.Bounce: if (isUI) Add(sp.FindPropertyRelative("bounceIntensity"), "Intensity"); else Add(sp.FindPropertyRelative("bounce3D"), "Bounce Vector"); Add(sp.FindPropertyRelative("bounceCount"), "Count"); break;
 				case AnimType.PunchRotate: if (isUI) BuildPunchRotateFields(c, sp, step); else Add(sp.FindPropertyRelative("punchRotate3D"), "Punch Vector"); break;
-				case AnimType.PunchScale: if (isUI) Add(sp.FindPropertyRelative("punchScaleIntensity"), "Intensity"); else Add(sp.FindPropertyRelative("punchScale3D"), "Punch Vector"); Add(sp.FindPropertyRelative("punchScaleFrequency"), "Frequency"); break;
+				case AnimType.PunchScale:
+					if (isUI) {
+						var (useV3Row, useV3Pill) = MakeToggleField(sp.FindPropertyRelative("punchScaleUseVector3"), "Use Vector3", () => step.punchScaleUseVector3);
+						c.Add(useV3Row);
+
+						var intensityField = new PropertyField(sp.FindPropertyRelative("punchScaleIntensity"), "Intensity");
+						var v3Field = new PropertyField(sp.FindPropertyRelative("punchScale3D"), "Punch Vector");
+						intensityField.Bind(serializedObject); v3Field.Bind(serializedObject);
+						c.Add(intensityField); c.Add(v3Field);
+
+						void RefreshPunch() {
+							intensityField.style.display = step.punchScaleUseVector3 ? DisplayStyle.None : DisplayStyle.Flex;
+							v3Field.style.display = step.punchScaleUseVector3 ? DisplayStyle.Flex : DisplayStyle.None;
+						}
+						RefreshPunch();
+						useV3Pill.onValueChanged += RefreshPunch;
+					} else {
+						Add(sp.FindPropertyRelative("punchScale3D"), "Punch Vector");
+					}
+					Add(sp.FindPropertyRelative("punchScaleFrequency"), "Frequency");
+					break;
 				case AnimType.ShakePosition: Add(sp.FindPropertyRelative("shakeStrength"), "Strength"); Add(sp.FindPropertyRelative("shakeFrequency"), "Frequency"); var (srPill, _) = MakeToggleField(sp.FindPropertyRelative("shakeFalloff"), "Falloff", () => step.shakeFalloff); c.Add(srPill); break;
 				case AnimType.ShakeRotation: Add(sp.FindPropertyRelative("shakeStrength"), "Strength"); Add(sp.FindPropertyRelative("shakeFrequency"), "Frequency"); var (srotPill, _) = MakeToggleField(sp.FindPropertyRelative("shakeFalloff"), "Falloff", () => step.shakeFalloff); c.Add(srotPill); break;
 				case AnimType.ColorTint: Add(sp.FindPropertyRelative("colorTarget"), "Color Target"); Add(sp.FindPropertyRelative("colorFrom"), "From", true); Add(sp.FindPropertyRelative("colorTo"), "To"); break;
 				case AnimType.FadeSpriteColor: Add(sp.FindPropertyRelative("spriteTarget"), "Sprite Target"); Add(sp.FindPropertyRelative("colorFrom"), "From", true); Add(sp.FindPropertyRelative("colorTo"), "To"); break;
-				case AnimType.SetColor: Add(sp.FindPropertyRelative("colorTarget"), "Color Target"); Add(sp.FindPropertyRelative("colorTo"), "Color"); break;
-				case AnimType.SetFade: Add(sp.FindPropertyRelative("setFadeValue"), "Alpha"); break;
-				case AnimType.SetSprite: Add(sp.FindPropertyRelative("spriteTarget"), "Sprite Target"); Add(sp.FindPropertyRelative("setSpriteValue"), "New Sprite"); break;
-				case AnimType.SetImage: Add(sp.FindPropertyRelative("imageTarget"), "Image Target"); Add(sp.FindPropertyRelative("setSpriteValue"), "New Sprite"); break;
 				case AnimType.TypeWriter: Add(sp.FindPropertyRelative("tmpTarget"), "TMP Target"); Add(sp.FindPropertyRelative("setTextValue"), "Text String"); Add(sp.FindPropertyRelative("typeWriterCharsPerSecond"), "Chars Per Second"); break;
 				case AnimType.TextCounter: BuildTextCounterFields(c, sp, step, seqIndex, stepIndex); break;
-				case AnimType.SetTransform: BuildSetTransformFields(c, sp, step, infoLabel, body); break;
-				case AnimType.SetText: Add(sp.FindPropertyRelative("tmpTarget"), "TMP Target"); Add(sp.FindPropertyRelative("setTextValue"), "Text Value"); break;
-				case AnimType.SetActive: var (actRow, actPill) = MakeToggleField(sp.FindPropertyRelative("setActiveValue"), "Set Active", () => step.setActiveValue); actPill.onValueChanged += () => infoLabel.text = BuildStepTypeInfo(step); c.Add(actRow); break;
-				case AnimType.SetCanvasGroupState: Add(sp.FindPropertyRelative("cgInteractable"), "Interactable"); Add(sp.FindPropertyRelative("cgBlocksRaycasts"), "Blocks Raycasts"); Add(sp.FindPropertyRelative("cgIgnoreParentGroups"), "Ignore Parent Groups"); break;
 				case AnimType.PlayAudio: Add(sp.FindPropertyRelative("audioTarget"), "Audio Target"); Add(sp.FindPropertyRelative("audioClip"), "Audio Clip"); Add(sp.FindPropertyRelative("audioVolume"), "Volume (Min/Max)"); Add(sp.FindPropertyRelative("audioPitch"), "Pitch (Min/Max)"); Add(sp.FindPropertyRelative("audioSpatialBlend"), "Spatial Blend"); break;
 				case AnimType.FadeAudio: Add(sp.FindPropertyRelative("audioTarget"), "Audio Target"); Add(sp.FindPropertyRelative("fadeAudioFrom"), "From", true); Add(sp.FindPropertyRelative("fadeAudioTo"), "To"); break;
 				case AnimType.TimeScale: Add(sp.FindPropertyRelative("timeScaleFrom"), "From", true); Add(sp.FindPropertyRelative("timeScaleTo"), "To"); break;
-				case AnimType.SetTimeScale: Add(sp.FindPropertyRelative("timeScaleTo"), "TimeScale Value"); break;
-				case AnimType.MaterialFloat: Add(sp.FindPropertyRelative("rendererTarget"), "Renderer Target"); Add(sp.FindPropertyRelative("materialPropertyName"), "Property Name"); Add(sp.FindPropertyRelative("materialFloatFrom"), "From", true); Add(sp.FindPropertyRelative("materialFloatTo"), "To"); break;
-				case AnimType.SetMaterialFloat: Add(sp.FindPropertyRelative("rendererTarget"), "Renderer Target"); Add(sp.FindPropertyRelative("materialPropertyName"), "Property Name"); Add(sp.FindPropertyRelative("materialFloatTo"), "Value"); break;
-				case AnimType.MaterialColor: Add(sp.FindPropertyRelative("rendererTarget"), "Renderer Target"); Add(sp.FindPropertyRelative("materialPropertyName"), "Property Name"); Add(sp.FindPropertyRelative("materialColorFrom"), "From", true); Add(sp.FindPropertyRelative("materialColorTo"), "To"); break;
-				case AnimType.SetMaterialColor: Add(sp.FindPropertyRelative("rendererTarget"), "Renderer Target"); Add(sp.FindPropertyRelative("materialPropertyName"), "Property Name"); Add(sp.FindPropertyRelative("materialColorTo"), "Color"); break;
+
+				case AnimType.SetProperty:
+					var subTypeField = new PropertyField(sp.FindPropertyRelative("setPropertyType"), "Set Property"); subTypeField.Bind(serializedObject); subTypeContainer.Add(subTypeField);
+					var setDyn = new VisualElement(); c.Add(setDyn);
+
+					void RebuildSet() {
+						setDyn.Clear();
+						switch (step.setPropertyType) {
+							case SetPropertyType.Transform: BuildSetTransformFields(setDyn, sp, step, infoLabel, body); break;
+							case SetPropertyType.Text: Add(sp.FindPropertyRelative("tmpTarget"), "TMP Target", false, false, setDyn); Add(sp.FindPropertyRelative("setTextValue"), "Text Value", false, false, setDyn); break;
+							case SetPropertyType.Color: Add(sp.FindPropertyRelative("colorTarget"), "Color Target", false, false, setDyn); Add(sp.FindPropertyRelative("colorTo"), "Color", false, false, setDyn); break;
+							case SetPropertyType.Sprite: Add(sp.FindPropertyRelative("spriteTarget"), "Sprite Target", false, false, setDyn); Add(sp.FindPropertyRelative("setSpriteValue"), "New Sprite", false, false, setDyn); break;
+							case SetPropertyType.Image: Add(sp.FindPropertyRelative("imageTarget"), "Image Target", false, false, setDyn); Add(sp.FindPropertyRelative("setSpriteValue"), "New Sprite", false, false, setDyn); break;
+							case SetPropertyType.Fade: Add(sp.FindPropertyRelative("setFadeValue"), "Alpha", false, false, setDyn); break;
+							case SetPropertyType.CanvasGroupState: Add(sp.FindPropertyRelative("cgInteractable"), "Interactable", false, false, setDyn); Add(sp.FindPropertyRelative("cgBlocksRaycasts"), "Blocks Raycasts", false, false, setDyn); Add(sp.FindPropertyRelative("cgIgnoreParentGroups"), "Ignore Parent Groups", false, false, setDyn); break;
+							case SetPropertyType.Active: var (actRow, actPill) = MakeToggleField(sp.FindPropertyRelative("setActiveValue"), "Set Active", () => step.setActiveValue); actPill.onValueChanged += () => infoLabel.text = BuildStepTypeInfo(step); setDyn.Add(actRow); break;
+							case SetPropertyType.TimeScale: Add(sp.FindPropertyRelative("timeScaleTo"), "TimeScale Value", false, false, setDyn); break;
+							case SetPropertyType.SizeDelta: setDyn.Add(MakeRelativeToggle(sp, step, infoLabel, body)); Add(sp.FindPropertyRelative("setSizeDeltaValue"), "Size", false, false, setDyn); break;
+							case SetPropertyType.Pivot: Add(sp.FindPropertyRelative("setPivotValue"), "Pivot", false, false, setDyn); break;
+						}
+						UpdateFromCurrentVisibility(body, step); UpdateToLabelVisibility(body, step);
+					}
+
+					subTypeField.RegisterValueChangeCallback(evt => {
+						step.setPropertyType = (SetPropertyType)evt.changedProperty.intValue;
+						infoLabel.text = BuildStepTypeInfo(step);
+						setDyn.schedule.Execute(RebuildSet);
+					});
+					RebuildSet();
+					break;
+
+				case AnimType.MaterialProperty:
+					var matTypeField = new PropertyField(sp.FindPropertyRelative("materialPropertyType"), "Property Type"); matTypeField.Bind(serializedObject); subTypeContainer.Add(matTypeField);
+					var matDyn = new VisualElement(); c.Add(matDyn);
+
+					var matTargetProp = sp.FindPropertyRelative("materialTarget");
+					var rendTargetProp = sp.FindPropertyRelative("rendererTarget");
+					var graphTargetProp = sp.FindPropertyRelative("graphicTarget");
+
+					var matRef = new PropertyField(matTargetProp, "Material Target"); matRef.Bind(serializedObject); matDyn.Add(matRef);
+					var rField = new PropertyField(rendTargetProp, "Renderer (Optional)"); rField.Bind(serializedObject); matDyn.Add(rField);
+					var gField = new PropertyField(graphTargetProp, "Graphic (Optional)"); gField.Bind(serializedObject); matDyn.Add(gField);
+					var iField = new PropertyField(sp.FindPropertyRelative("materialIndex"), "Material Index"); iField.Bind(serializedObject); matDyn.Add(iField);
+
+					Add(sp.FindPropertyRelative("materialPropertyName"), "Property Name", false, false, matDyn);
+
+					var fromF = new PropertyField(sp.FindPropertyRelative("materialFloatFrom"), "From"); fromF.Bind(serializedObject); fromF.name = "fromField"; matDyn.Add(fromF);
+					var toF = new PropertyField(sp.FindPropertyRelative("materialFloatTo"), "To"); toF.Bind(serializedObject); toF.name = "toField"; matDyn.Add(toF);
+					var fromC = new PropertyField(sp.FindPropertyRelative("materialColorFrom"), "From"); fromC.Bind(serializedObject); fromC.name = "fromField"; matDyn.Add(fromC);
+					var toC = new PropertyField(sp.FindPropertyRelative("materialColorTo"), "To"); toC.Bind(serializedObject); toC.name = "toField"; matDyn.Add(toC);
+
+					void UpdateMatVis() {
+						bool hasMat = matTargetProp.objectReferenceValue != null;
+						bool hasR = rendTargetProp.objectReferenceValue != null;
+						bool hasG = graphTargetProp.objectReferenceValue != null;
+
+						rField.style.display = (hasMat || hasG) ? DisplayStyle.None : DisplayStyle.Flex;
+						gField.style.display = (hasMat || hasR) ? DisplayStyle.None : DisplayStyle.Flex;
+						iField.style.display = (hasMat || hasG) ? DisplayStyle.None : DisplayStyle.Flex;
+
+						bool isFloat = sp.FindPropertyRelative("materialPropertyType").intValue == (int)MaterialPropertyType.Float;
+						fromF.style.display = isFloat && !fc ? DisplayStyle.Flex : DisplayStyle.None;
+						toF.style.display = isFloat ? DisplayStyle.Flex : DisplayStyle.None;
+						fromC.style.display = !isFloat && !fc ? DisplayStyle.Flex : DisplayStyle.None;
+						toC.style.display = !isFloat ? DisplayStyle.Flex : DisplayStyle.None;
+
+						toF.label = step.relativeOffset ? "To Offset" : "To";
+						toC.label = step.relativeOffset ? "To Offset" : "To";
+						fromF.label = step.relativeOffset ? "From Offset" : "From";
+						fromC.label = step.relativeOffset ? "From Offset" : "From";
+					}
+
+					UpdateMatVis();
+					matRef.RegisterValueChangeCallback(_ => UpdateMatVis());
+					rField.RegisterValueChangeCallback(_ => UpdateMatVis());
+					gField.RegisterValueChangeCallback(_ => UpdateMatVis());
+					matTypeField.RegisterValueChangeCallback(evt => {
+						step.materialPropertyType = (MaterialPropertyType)evt.changedProperty.intValue;
+						infoLabel.text = BuildStepTypeInfo(step);
+						UpdateMatVis();
+					});
+					break;
+
+				case AnimType.SetMaterialProperty:
+					var setMatTypeField = new PropertyField(sp.FindPropertyRelative("materialPropertyType"), "Property Type"); setMatTypeField.Bind(serializedObject); subTypeContainer.Add(setMatTypeField);
+					var setMatDyn = new VisualElement(); c.Add(setMatDyn);
+
+					var setMatTargetProp = sp.FindPropertyRelative("materialTarget");
+					var setRendTargetProp = sp.FindPropertyRelative("rendererTarget");
+					var setGraphTargetProp = sp.FindPropertyRelative("graphicTarget");
+
+					var setMatRef = new PropertyField(setMatTargetProp, "Material Target"); setMatRef.Bind(serializedObject); setMatDyn.Add(setMatRef);
+					var setRField = new PropertyField(setRendTargetProp, "Renderer (Optional)"); setRField.Bind(serializedObject); setMatDyn.Add(setRField);
+					var setGField = new PropertyField(setGraphTargetProp, "Graphic (Optional)"); setGField.Bind(serializedObject); setMatDyn.Add(setGField);
+					var setIField = new PropertyField(sp.FindPropertyRelative("materialIndex"), "Material Index"); setIField.Bind(serializedObject); setMatDyn.Add(setIField);
+
+					Add(sp.FindPropertyRelative("materialPropertyName"), "Property Name", false, false, setMatDyn);
+
+					var toFSet = new PropertyField(sp.FindPropertyRelative("materialFloatTo"), "Value"); toFSet.Bind(serializedObject); toFSet.name = "toField"; setMatDyn.Add(toFSet);
+					var toCSet = new PropertyField(sp.FindPropertyRelative("materialColorTo"), "Color"); toCSet.Bind(serializedObject); toCSet.name = "toField"; setMatDyn.Add(toCSet);
+
+					void UpdateSetMatVis() {
+						bool hasMat = setMatTargetProp.objectReferenceValue != null;
+						bool hasR = setRendTargetProp.objectReferenceValue != null;
+						bool hasG = setGraphTargetProp.objectReferenceValue != null;
+
+						setRField.style.display = (hasMat || hasG) ? DisplayStyle.None : DisplayStyle.Flex;
+						setGField.style.display = (hasMat || hasR) ? DisplayStyle.None : DisplayStyle.Flex;
+						setIField.style.display = (hasMat || hasG) ? DisplayStyle.None : DisplayStyle.Flex;
+
+						bool isFloat = sp.FindPropertyRelative("materialPropertyType").intValue == (int)MaterialPropertyType.Float;
+						toFSet.style.display = isFloat ? DisplayStyle.Flex : DisplayStyle.None;
+						toCSet.style.display = !isFloat ? DisplayStyle.Flex : DisplayStyle.None;
+					}
+
+					UpdateSetMatVis();
+					setMatRef.RegisterValueChangeCallback(_ => UpdateSetMatVis());
+					setRField.RegisterValueChangeCallback(_ => UpdateSetMatVis());
+					setGField.RegisterValueChangeCallback(_ => UpdateSetMatVis());
+					setMatTypeField.RegisterValueChangeCallback(evt => {
+						step.materialPropertyType = (MaterialPropertyType)evt.changedProperty.intValue;
+						infoLabel.text = BuildStepTypeInfo(step);
+						UpdateSetMatVis();
+					});
+					break;
+
 				case AnimType.Trigger:
 					var seqField = MakeTargetField(sp.FindPropertyRelative("triggerSequencer"), "Sequencer"); seqField.RegisterValueChangeCallback(evt => { step.triggerSequencer = evt.changedProperty.objectReferenceValue as AnimSequencer; infoLabel.text = BuildStepTypeInfo(step); }); c.Add(seqField);
 					var lblField = new PropertyField(sp.FindPropertyRelative("triggerSequenceLabel"), "Sequence Label"); lblField.Bind(serializedObject); lblField.RegisterValueChangeCallback(evt => { step.triggerSequenceLabel = evt.changedProperty.stringValue; infoLabel.text = BuildStepTypeInfo(step); }); c.Add(lblField); break;
@@ -410,7 +565,30 @@ namespace Sperlich.Sequencer.Editor {
 					var durField = new PropertyField(sp.FindPropertyRelative("duration"), "Duration (Seconds)"); durField.Bind(serializedObject); c.Add(durField);
 					var framesField = new PropertyField(sp.FindPropertyRelative("waitFrames"), "Frames"); framesField.Bind(serializedObject); c.Add(framesField);
 					void RefreshWait() { bool isFrames = step.waitMethod == WaitMethod.Frames; durField.style.display = isFrames ? DisplayStyle.None : DisplayStyle.Flex; framesField.style.display = isFrames ? DisplayStyle.Flex : DisplayStyle.None; }
-					RefreshWait(); waitMethodField.RegisterValueChangeCallback(evt => { step.waitMethod = (WaitMethod)evt.changedProperty.enumValueIndex; RefreshWait(); infoLabel.text = BuildStepTypeInfo(step); }); break;
+					RefreshWait(); waitMethodField.RegisterValueChangeCallback(evt => { step.waitMethod = (WaitMethod)evt.changedProperty.intValue; RefreshWait(); infoLabel.text = BuildStepTypeInfo(step); }); break;
+				case AnimType.ControlSequence:
+					var ctrlTypeField = new PropertyField(sp.FindPropertyRelative("sequenceControlType"), "Action"); ctrlTypeField.Bind(serializedObject); c.Add(ctrlTypeField);
+					var ctrlTargetField = new PropertyField(sp.FindPropertyRelative("sequenceControlTarget"), "Target Scope"); ctrlTargetField.Bind(serializedObject); c.Add(ctrlTargetField);
+
+					var ctrlSeqField = MakeTargetField(sp.FindPropertyRelative("controlSequencerTarget"), "Sequencer");
+					ctrlSeqField.RegisterValueChangeCallback(evt => { step.controlSequencerTarget = evt.changedProperty.objectReferenceValue as AnimSequencer; infoLabel.text = BuildStepTypeInfo(step); });
+					c.Add(ctrlSeqField);
+
+					var ctrlLblField = new PropertyField(sp.FindPropertyRelative("controlSequenceLabel"), "Sequence Label"); ctrlLblField.Bind(serializedObject); c.Add(ctrlLblField);
+
+					void UpdateCtrlVis() {
+						bool isSpecific = step.sequenceControlTarget == SequenceControlTarget.Specific;
+						bool isSelf = step.sequenceControlTarget == SequenceControlTarget.Self;
+
+						ctrlLblField.style.display = isSpecific ? DisplayStyle.Flex : DisplayStyle.None;
+						ctrlSeqField.style.display = isSelf ? DisplayStyle.None : DisplayStyle.Flex;
+					}
+
+					UpdateCtrlVis();
+					ctrlTypeField.RegisterValueChangeCallback(evt => { step.sequenceControlType = (SequenceControlType)evt.changedProperty.intValue; infoLabel.text = BuildStepTypeInfo(step); });
+					ctrlTargetField.RegisterValueChangeCallback(evt => { step.sequenceControlTarget = (SequenceControlTarget)evt.changedProperty.intValue; infoLabel.text = BuildStepTypeInfo(step); UpdateCtrlVis(); });
+					ctrlLblField.RegisterValueChangeCallback(evt => { step.controlSequenceLabel = evt.changedProperty.stringValue; infoLabel.text = BuildStepTypeInfo(step); });
+					break;
 			}
 			UpdateFromCurrentVisibility(body, step); UpdateToLabelVisibility(body, step);
 		}
@@ -449,39 +627,46 @@ namespace Sperlich.Sequencer.Editor {
 			f.RegisterValueChangeCallback(evt => f.label = evt.changedProperty.objectReferenceValue == null ? $"{baseLabel} [Self]" : baseLabel); return f;
 		}
 
-		static bool IsInstantType(AnimType t) { return t == AnimType.SetTransform || t == AnimType.SetText || t == AnimType.SetColor || t == AnimType.SetActive || t == AnimType.Trigger || t == AnimType.Event || t == AnimType.SetSprite || t == AnimType.SetImage || t == AnimType.SetFade || t == AnimType.SetCanvasGroupState || t == AnimType.PlayAudio || t == AnimType.SetTimeScale || t == AnimType.SetMaterialFloat || t == AnimType.SetMaterialColor; }
+		static bool IsInstantType(AnimType t) {
+			return t == AnimType.Trigger || t == AnimType.Event || t == AnimType.PlayAudio || t == AnimType.SetProperty || t == AnimType.SetMaterialProperty || t == AnimType.ControlSequence;
+		}
 		static bool IsLogicType(AnimType t) { return t == AnimType.Anchor || t == AnimType.Repeat || t == AnimType.WaitUntil; }
 		static bool IsModeHidden(AnimType t) { return t == AnimType.Anchor; }
 		static bool IsDelayHidden(AnimType t) { return t == AnimType.Anchor; }
 		static bool IsDurationHidden(AnimType t) { return IsInstantType(t) || t == AnimType.TypeWriter || IsLogicType(t) || t == AnimType.Wait; }
 		static bool IsEaseHidden(AnimType t) { return IsInstantType(t) || t == AnimType.Wait || t == AnimType.Bounce || t == AnimType.PunchRotate || t == AnimType.PunchScale || t == AnimType.ShakePosition || t == AnimType.ShakeRotation || IsLogicType(t); }
 		static bool IsFromCurrentHidden(AnimStep step) { AnimType t = step.type; return t == AnimType.Wait || t == AnimType.Bounce || t == AnimType.PunchRotate || t == AnimType.PunchScale || t == AnimType.ShakePosition || t == AnimType.ShakeRotation || t == AnimType.TypeWriter || t == AnimType.TextCounter || IsInstantType(t) || IsLogicType(t); }
-		static bool IsTargetHidden(AnimType t) { return t == AnimType.Wait || t == AnimType.TypeWriter || t == AnimType.TextCounter || t == AnimType.SetText || t == AnimType.Trigger || t == AnimType.Event || t == AnimType.SetSprite || t == AnimType.FadeSpriteColor || t == AnimType.SetImage || t == AnimType.TimeScale || t == AnimType.SetTimeScale || IsLogicType(t); }
+		static bool IsTargetHidden(AnimStep step) {
+			AnimType t = step.type;
+			if (t == AnimType.SetProperty) { var st = step.setPropertyType; return st == SetPropertyType.Text || st == SetPropertyType.Sprite || st == SetPropertyType.Image || st == SetPropertyType.TimeScale; }
+			if (t == AnimType.MaterialProperty || t == AnimType.SetMaterialProperty || t == AnimType.ControlSequence) return true;
+			return t == AnimType.Wait || t == AnimType.TypeWriter || t == AnimType.TextCounter || t == AnimType.Trigger || t == AnimType.Event || t == AnimType.FadeSpriteColor || t == AnimType.TimeScale || IsLogicType(t);
+		}
+
 		static bool IsInteractableTrigger(TriggerType t) { return t == TriggerType.OnBecameInteractable || t == TriggerType.OnBecameNonInteractable; }
 		static string Dur(float f) { return f.ToString("0.##", CultureInfo.InvariantCulture) + "s"; }
 
 		string BuildStepTypeInfo(AnimStep step) {
 			string delay = step.delay > 0f ? $"  +{Dur(step.delay)}" : "";
-			string rel = step.relativeOffset && (step.type == AnimType.Slide || step.type == AnimType.Scale || step.type == AnimType.Rotate || step.type == AnimType.SetTransform || step.type == AnimType.SizeDelta) ? " Relative" : "";
+			string rel = step.relativeOffset && (step.type == AnimType.Slide || step.type == AnimType.Scale || step.type == AnimType.Rotate || step.type == AnimType.SetProperty || step.type == AnimType.SizeDelta) ? " Relative" : "";
 			if (step.type == AnimType.Trigger) {
 				var targetSeq = step.triggerSequencer != null ? step.triggerSequencer : _sequencer;
 				bool exists = string.IsNullOrEmpty(step.triggerSequenceLabel) || (targetSeq != null && targetSeq.sequences.Exists(s => s.label == step.triggerSequenceLabel));
 				string lbl = string.IsNullOrEmpty(step.triggerSequenceLabel) ? "None" : (!exists ? $"<color=#ff5555>{step.triggerSequenceLabel}</color>" : step.triggerSequenceLabel);
 				return $"<b>Trigger</b> ({(step.triggerSequencer != null ? step.triggerSequencer.name : "Self")} → {lbl}){delay}";
 			}
+			if (step.type == AnimType.ControlSequence) {
+				string tgt = step.sequenceControlTarget == SequenceControlTarget.All ? "All" : (step.sequenceControlTarget == SequenceControlTarget.Self ? "Self" : (string.IsNullOrEmpty(step.controlSequenceLabel) ? "None" : $"'{step.controlSequenceLabel}'"));
+				string ext = step.controlSequencerTarget != null && step.sequenceControlTarget != SequenceControlTarget.Self ? $" on {step.controlSequencerTarget.name}" : "";
+				return $"<b>{step.sequenceControlType}</b> ({tgt}){ext}{delay}";
+			}
+
+			if (step.type == AnimType.SetProperty) return $"<b>Set</b> ({step.setPropertyType}){rel}{delay}";
+			if (step.type == AnimType.MaterialProperty) return $"<b>MaterialProperty</b> ({step.materialPropertyType}){delay}";
+			if (step.type == AnimType.SetMaterialProperty) return $"<b>SetMaterialProperty</b> ({step.materialPropertyType}){delay}";
+
 			switch (step.type) {
-				case AnimType.SetTransform: return $"<b>{step.type}{rel}</b> ({step.transformSubType}){delay}";
-				case AnimType.SetText: return $"<b>SetText</b>{delay}";
-				case AnimType.SetColor: return $"<b>SetColor</b>{delay}";
-				case AnimType.SetSprite: return $"<b>SetSprite</b>{delay}";
-				case AnimType.SetImage: return $"<b>SetImage</b>{delay}";
-				case AnimType.SetFade: return $"<b>SetFade</b>{delay}";
-				case AnimType.SetCanvasGroupState: return $"<b>SetCanvasGroupState</b>{delay}";
 				case AnimType.PlayAudio: return $"<b>PlayAudio</b>{delay}";
-				case AnimType.SetTimeScale: return $"<b>SetTimeScale</b>{delay}";
-				case AnimType.SetMaterialFloat: return $"<b>SetMaterialFloat</b>{delay}";
-				case AnimType.SetMaterialColor: return $"<b>SetMaterialColor</b>{delay}";
-				case AnimType.SetActive: return $"<b>SetActive</b> ({(step.setActiveValue ? "On" : "Off")}){delay}";
 				case AnimType.TypeWriter: return $"<b>TypeWriter</b>{delay}";
 				case AnimType.Wait: return $"<b>Wait</b>  {(step.waitMethod == WaitMethod.Frames ? step.waitFrames + " Frames" : Dur(step.duration))}{delay}";
 				case AnimType.Event: return $"<b>Event</b>{delay}";
@@ -492,8 +677,25 @@ namespace Sperlich.Sequencer.Editor {
 			}
 		}
 
-		Color GetAnimTypeColor(AnimType type) {
-			switch (type) {
+		Color GetAnimTypeColor(AnimStep step) {
+			if (step.type == AnimType.SetProperty) {
+				switch (step.setPropertyType) {
+					case SetPropertyType.Active: return ColorSetActive;
+					case SetPropertyType.Transform: return ColorSetTransform;
+					case SetPropertyType.Color: return ColorSetColor;
+					case SetPropertyType.Fade: return ColorSetFade;
+					case SetPropertyType.Text: return ColorSetText;
+					case SetPropertyType.Sprite: return ColorSprite;
+					case SetPropertyType.Image: return ColorSetColor;
+					case SetPropertyType.CanvasGroupState: return ColorSetActive;
+					case SetPropertyType.TimeScale: return ColorTimeScale;
+					case SetPropertyType.SizeDelta: return ColorSizeDelta;
+					case SetPropertyType.Pivot: return ColorSetTransform;
+					default: return ColorSetTransform;
+				}
+			}
+
+			switch (step.type) {
 				case AnimType.Fade: return ColorFade;
 				case AnimType.Scale: return ColorScale;
 				case AnimType.Slide: return ColorSlide;
@@ -505,22 +707,15 @@ namespace Sperlich.Sequencer.Editor {
 				case AnimType.PunchScale: return ColorPunchScale;
 				case AnimType.ShakePosition: case AnimType.ShakeRotation: return ColorShake;
 				case AnimType.ColorTint: return ColorColorTint;
-				case AnimType.SetColor: return ColorSetColor;
 				case AnimType.TypeWriter: return ColorTypeWriter;
 				case AnimType.TextCounter: return ColorTextCounter;
-				case AnimType.SetTransform: return ColorSetTransform;
 				case AnimType.Wait: return ColorWait;
-				case AnimType.SetText: return ColorSetText;
-				case AnimType.SetActive: return ColorSetActive;
 				case AnimType.Trigger: return ColorTrigger;
 				case AnimType.Event: return ColorEvent;
-				case AnimType.SetSprite: case AnimType.FadeSpriteColor: return ColorSprite;
-				case AnimType.SetImage: return ColorSetColor;
-				case AnimType.SetFade: return ColorSetFade;
-				case AnimType.SetCanvasGroupState: return ColorSetActive;
+				case AnimType.FadeSpriteColor: return ColorSprite;
 				case AnimType.PlayAudio: case AnimType.FadeAudio: return ColorAudio;
-				case AnimType.TimeScale: case AnimType.SetTimeScale: return ColorTimeScale;
-				case AnimType.MaterialFloat: case AnimType.SetMaterialFloat: case AnimType.MaterialColor: case AnimType.SetMaterialColor: return ColorMaterial;
+				case AnimType.TimeScale: return ColorTimeScale;
+				case AnimType.MaterialProperty: case AnimType.SetMaterialProperty: return ColorMaterial;
 				case AnimType.Anchor: return ColorAnchor;
 				case AnimType.Repeat: return ColorRepeat;
 				case AnimType.WaitUntil: return ColorWaitUntil;

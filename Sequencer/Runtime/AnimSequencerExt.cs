@@ -638,43 +638,63 @@ namespace Sperlich.Sequencer {
 		}
 		#endregion
 
-		#region MaterialFloat
-		public static AnimSequencer.AnimSequence SetMaterialFloat(this AnimSequencer.AnimSequence seq, int index, float value) {
-			ApplyToStep(seq, index, s => s.materialFloatTo = value, "MaterialFloat");
+		#region MaterialTarget
+		public static AnimSequencer.AnimSequence SetMaterialTarget(this AnimSequencer.AnimSequence seq, int index, Material target) {
+			ApplyToStep(seq, index, s => s.materialTarget = target, "SetMaterialTarget");
 			return seq;
 		}
-		public static AnimSequencer.AnimSequence SetMaterialFloat(this AnimSequencer.AnimSequence seq, string tag, float value) {
+		public static AnimSequencer.AnimSequence SetMaterialTarget(this AnimSequencer.AnimSequence seq, string tag, Material target) {
 			int index = -1;
 			if (seq != null) {
 				index = seq.FindStepIndex(tag);
 			}
-			return seq.SetMaterialFloat(index, value);
+			return seq.SetMaterialTarget(index, target);
 		}
-		public static AnimSequencer SetMaterialFloat(this AnimSequencer sequencer, string seqLabel, int stepIndex, float value) {
-			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialFloat(stepIndex, value));
+		public static AnimSequencer SetMaterialTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, Material target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialTarget(stepIndex, target));
 		}
-		public static AnimSequencer SetMaterialFloat(this AnimSequencer sequencer, string seqLabel, string stepTag, float value) {
-			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialFloat(stepTag, value));
+		public static AnimSequencer SetMaterialTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, Material target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialTarget(stepTag, target));
 		}
 		#endregion
 
-		#region MaterialColor
-		public static AnimSequencer.AnimSequence SetMaterialColor(this AnimSequencer.AnimSequence seq, int index, Color color) {
-			ApplyToStep(seq, index, s => s.materialColorTo = color, "MaterialColor");
+		#region MaterialIndex
+		public static AnimSequencer.AnimSequence SetMaterialIndex(this AnimSequencer.AnimSequence seq, int index, int materialIndex) {
+			ApplyToStep(seq, index, s => s.materialIndex = materialIndex, "SetMaterialIndex");
 			return seq;
 		}
-		public static AnimSequencer.AnimSequence SetMaterialColor(this AnimSequencer.AnimSequence seq, string tag, Color color) {
+		public static AnimSequencer.AnimSequence SetMaterialIndex(this AnimSequencer.AnimSequence seq, string tag, int materialIndex) {
 			int index = -1;
 			if (seq != null) {
 				index = seq.FindStepIndex(tag);
 			}
-			return seq.SetMaterialColor(index, color);
+			return seq.SetMaterialIndex(index, materialIndex);
 		}
-		public static AnimSequencer SetMaterialColor(this AnimSequencer sequencer, string seqLabel, int stepIndex, Color color) {
-			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialColor(stepIndex, color));
+		public static AnimSequencer SetMaterialIndex(this AnimSequencer sequencer, string seqLabel, int stepIndex, int materialIndex) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialIndex(stepIndex, materialIndex));
 		}
-		public static AnimSequencer SetMaterialColor(this AnimSequencer sequencer, string seqLabel, string stepTag, Color color) {
-			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialColor(stepTag, color));
+		public static AnimSequencer SetMaterialIndex(this AnimSequencer sequencer, string seqLabel, string stepTag, int materialIndex) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialIndex(stepTag, materialIndex));
+		}
+		#endregion
+
+		#region GraphicTarget
+		public static AnimSequencer.AnimSequence SetGraphicTarget(this AnimSequencer.AnimSequence seq, int index, UnityEngine.UI.Graphic target) {
+			ApplyToStep(seq, index, s => s.graphicTarget = target, "SetGraphicTarget");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetGraphicTarget(this AnimSequencer.AnimSequence seq, string tag, UnityEngine.UI.Graphic target) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetGraphicTarget(index, target);
+		}
+		public static AnimSequencer SetGraphicTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, UnityEngine.UI.Graphic target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetGraphicTarget(stepIndex, target));
+		}
+		public static AnimSequencer SetGraphicTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, UnityEngine.UI.Graphic target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetGraphicTarget(stepTag, target));
 		}
 		#endregion
 
@@ -738,5 +758,232 @@ namespace Sperlich.Sequencer {
 		}
 		#endregion
 
+		#region SetPropertyType
+		public static AnimSequencer.AnimSequence SetPropertyType(this AnimSequencer.AnimSequence seq, int index, SetPropertyType type) {
+			ApplyToStep(seq, index, s => s.setPropertyType = type, "SetPropertyType");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetPropertyType(this AnimSequencer.AnimSequence seq, string tag, SetPropertyType type) {
+			int index = -1;
+			if (seq != null) index = seq.FindStepIndex(tag);
+			return seq.SetPropertyType(index, type);
+		}
+		public static AnimSequencer SetPropertyType(this AnimSequencer sequencer, string seqLabel, int stepIndex, SetPropertyType type) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetPropertyType(stepIndex, type));
+		}
+		public static AnimSequencer SetPropertyType(this AnimSequencer sequencer, string seqLabel, string stepTag, SetPropertyType type) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetPropertyType(stepTag, type));
+		}
+		#endregion
+
+		#region MaterialPropertyType
+		public static AnimSequencer.AnimSequence SetMaterialPropertyType(this AnimSequencer.AnimSequence seq, int index, MaterialPropertyType type) {
+			ApplyToStep(seq, index, s => s.materialPropertyType = type, "MaterialPropertyType");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetMaterialPropertyType(this AnimSequencer.AnimSequence seq, string tag, MaterialPropertyType type) {
+			int index = -1;
+			if (seq != null) index = seq.FindStepIndex(tag);
+			return seq.SetMaterialPropertyType(index, type);
+		}
+		public static AnimSequencer SetMaterialPropertyType(this AnimSequencer sequencer, string seqLabel, int stepIndex, MaterialPropertyType type) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialPropertyType(stepIndex, type));
+		}
+		public static AnimSequencer SetMaterialPropertyType(this AnimSequencer sequencer, string seqLabel, string stepTag, MaterialPropertyType type) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialPropertyType(stepTag, type));
+		}
+		#endregion
+
+		#region RendererTarget
+		public static AnimSequencer.AnimSequence SetRendererTarget(this AnimSequencer.AnimSequence seq, int index, Renderer target) {
+			ApplyToStep(seq, index, s => s.rendererTarget = target, "RendererTarget");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetRendererTarget(this AnimSequencer.AnimSequence seq, string tag, Renderer target) {
+			int index = -1;
+			if (seq != null) index = seq.FindStepIndex(tag);
+			return seq.SetRendererTarget(index, target);
+		}
+		public static AnimSequencer SetRendererTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, Renderer target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetRendererTarget(stepIndex, target));
+		}
+		public static AnimSequencer SetRendererTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, Renderer target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetRendererTarget(stepTag, target));
+		}
+		#endregion
+
+		#region MaterialPropertyName
+		public static AnimSequencer.AnimSequence SetMaterialPropertyName(this AnimSequencer.AnimSequence seq, int index, string propertyName) {
+			ApplyToStep(seq, index, s => s.materialPropertyName = propertyName, "MaterialPropertyName");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetMaterialPropertyName(this AnimSequencer.AnimSequence seq, string tag, string propertyName) {
+			int index = -1;
+			if (seq != null) index = seq.FindStepIndex(tag);
+			return seq.SetMaterialPropertyName(index, propertyName);
+		}
+		public static AnimSequencer SetMaterialPropertyName(this AnimSequencer sequencer, string seqLabel, int stepIndex, string propertyName) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialPropertyName(stepIndex, propertyName));
+		}
+		public static AnimSequencer SetMaterialPropertyName(this AnimSequencer sequencer, string seqLabel, string stepTag, string propertyName) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialPropertyName(stepTag, propertyName));
+		}
+		#endregion
+
+		#region MaterialFloatFrom
+		public static AnimSequencer.AnimSequence SetMaterialFloatFrom(this AnimSequencer.AnimSequence seq, int index, float value) {
+			ApplyToStep(seq, index, s => { s.animateFromCurrent = false; s.materialFloatFrom = value; }, "MaterialFloatFrom");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetMaterialFloatFrom(this AnimSequencer.AnimSequence seq, string tag, float value) {
+			int index = -1;
+			if (seq != null) index = seq.FindStepIndex(tag);
+			return seq.SetMaterialFloatFrom(index, value);
+		}
+		public static AnimSequencer SetMaterialFloatFrom(this AnimSequencer sequencer, string seqLabel, int stepIndex, float value) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialFloatFrom(stepIndex, value));
+		}
+		public static AnimSequencer SetMaterialFloatFrom(this AnimSequencer sequencer, string seqLabel, string stepTag, float value) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialFloatFrom(stepTag, value));
+		}
+		#endregion
+
+		#region MaterialColorFrom
+		public static AnimSequencer.AnimSequence SetMaterialColorFrom(this AnimSequencer.AnimSequence seq, int index, Color color) {
+			ApplyToStep(seq, index, s => { s.animateFromCurrent = false; s.materialColorFrom = color; }, "MaterialColorFrom");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetMaterialColorFrom(this AnimSequencer.AnimSequence seq, string tag, Color color) {
+			int index = -1;
+			if (seq != null) index = seq.FindStepIndex(tag);
+			return seq.SetMaterialColorFrom(index, color);
+		}
+		public static AnimSequencer SetMaterialColorFrom(this AnimSequencer sequencer, string seqLabel, int stepIndex, Color color) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialColorFrom(stepIndex, color));
+		}
+		public static AnimSequencer SetMaterialColorFrom(this AnimSequencer sequencer, string seqLabel, string stepTag, Color color) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetMaterialColorFrom(stepTag, color));
+		}
+		#endregion
+
+		#region PunchScaleUseVector3
+		public static AnimSequencer.AnimSequence SetPunchScaleUseVector3(this AnimSequencer.AnimSequence seq, int index, bool useVector3) {
+			ApplyToStep(seq, index, s => s.punchScaleUseVector3 = useVector3, "PunchScaleUseVector3");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetPunchScaleUseVector3(this AnimSequencer.AnimSequence seq, string tag, bool useVector3) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetPunchScaleUseVector3(index, useVector3);
+		}
+		public static AnimSequencer SetPunchScaleUseVector3(this AnimSequencer sequencer, string seqLabel, int stepIndex, bool useVector3) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetPunchScaleUseVector3(stepIndex, useVector3));
+		}
+		public static AnimSequencer SetPunchScaleUseVector3(this AnimSequencer sequencer, string seqLabel, string stepTag, bool useVector3) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetPunchScaleUseVector3(stepTag, useVector3));
+		}
+		#endregion
+
+		#region PunchScale3D
+		public static AnimSequencer.AnimSequence SetPunchScale3D(this AnimSequencer.AnimSequence seq, int index, Vector3 punch) {
+			ApplyToStep(seq, index, s => s.punchScale3D = punch, "PunchScale3D");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetPunchScale3D(this AnimSequencer.AnimSequence seq, string tag, Vector3 punch) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetPunchScale3D(index, punch);
+		}
+		public static AnimSequencer SetPunchScale3D(this AnimSequencer sequencer, string seqLabel, int stepIndex, Vector3 punch) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetPunchScale3D(stepIndex, punch));
+		}
+		public static AnimSequencer SetPunchScale3D(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector3 punch) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetPunchScale3D(stepTag, punch));
+		}
+		#endregion
+
+		#region SequenceControlType
+		public static AnimSequencer.AnimSequence SetSequenceControlType(this AnimSequencer.AnimSequence seq, int index, SequenceControlType type) {
+			ApplyToStep(seq, index, s => s.sequenceControlType = type, "SequenceControlType");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetSequenceControlType(this AnimSequencer.AnimSequence seq, string tag, SequenceControlType type) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetSequenceControlType(index, type);
+		}
+		public static AnimSequencer SetSequenceControlType(this AnimSequencer sequencer, string seqLabel, int stepIndex, SequenceControlType type) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSequenceControlType(stepIndex, type));
+		}
+		public static AnimSequencer SetSequenceControlType(this AnimSequencer sequencer, string seqLabel, string stepTag, SequenceControlType type) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSequenceControlType(stepTag, type));
+		}
+		#endregion
+
+		#region SequenceControlTarget
+		public static AnimSequencer.AnimSequence SetSequenceControlTarget(this AnimSequencer.AnimSequence seq, int index, SequenceControlTarget scope) {
+			ApplyToStep(seq, index, s => s.sequenceControlTarget = scope, "SequenceControlTarget");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetSequenceControlTarget(this AnimSequencer.AnimSequence seq, string tag, SequenceControlTarget scope) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetSequenceControlTarget(index, scope);
+		}
+		public static AnimSequencer SetSequenceControlTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, SequenceControlTarget scope) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSequenceControlTarget(stepIndex, scope));
+		}
+		public static AnimSequencer SetSequenceControlTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, SequenceControlTarget scope) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetSequenceControlTarget(stepTag, scope));
+		}
+		#endregion
+
+		#region ControlSequencerTarget
+		public static AnimSequencer.AnimSequence SetControlSequencerTarget(this AnimSequencer.AnimSequence seq, int index, AnimSequencer target) {
+			ApplyToStep(seq, index, s => s.controlSequencerTarget = target, "ControlSequencerTarget");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetControlSequencerTarget(this AnimSequencer.AnimSequence seq, string tag, AnimSequencer target) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetControlSequencerTarget(index, target);
+		}
+		public static AnimSequencer SetControlSequencerTarget(this AnimSequencer sequencer, string seqLabel, int stepIndex, AnimSequencer target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetControlSequencerTarget(stepIndex, target));
+		}
+		public static AnimSequencer SetControlSequencerTarget(this AnimSequencer sequencer, string seqLabel, string stepTag, AnimSequencer target) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetControlSequencerTarget(stepTag, target));
+		}
+		#endregion
+
+		#region ControlSequenceLabel
+		public static AnimSequencer.AnimSequence SetControlSequenceLabel(this AnimSequencer.AnimSequence seq, int index, string label) {
+			ApplyToStep(seq, index, s => s.controlSequenceLabel = label, "ControlSequenceLabel");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetControlSequenceLabel(this AnimSequencer.AnimSequence seq, string tag, string label) {
+			int index = -1;
+			if (seq != null) {
+				index = seq.FindStepIndex(tag);
+			}
+			return seq.SetControlSequenceLabel(index, label);
+		}
+		public static AnimSequencer SetControlSequenceLabel(this AnimSequencer sequencer, string seqLabel, int stepIndex, string label) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetControlSequenceLabel(stepIndex, label));
+		}
+		public static AnimSequencer SetControlSequenceLabel(this AnimSequencer sequencer, string seqLabel, string stepTag, string label) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetControlSequenceLabel(stepTag, label));
+		}
+		#endregion
 	}
 }

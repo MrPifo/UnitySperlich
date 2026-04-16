@@ -228,11 +228,19 @@ namespace Sperlich.Sequencer {
 
 	public class PunchScaleConfig : TweenConfig {
 		public Transform target;
+		public bool useVector3 = false;
 		public float intensity = 0.2f;
 		public Vector3 punch3D = new Vector3(0.2f, 0.2f, 0.2f);
 		public float frequency = 10f;
 		public override AnimType GetAnimType() { return AnimType.PunchScale; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.target = target; s.punchScaleIntensity = intensity; s.punchScale3D = punch3D; s.punchScaleFrequency = frequency; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { 
+			base.ApplyTo(s); 
+			s.target = target; 
+			s.punchScaleUseVector3 = useVector3;
+			s.punchScaleIntensity = intensity; 
+			s.punchScale3D = punch3D; 
+			s.punchScaleFrequency = frequency; 
+		}
 	}
 
 	public class ShakePositionConfig : TargetTweenConfig {
@@ -272,22 +280,55 @@ namespace Sperlich.Sequencer {
 
 	public class MaterialFloatConfig : TweenConfig {
 		public Renderer rendererTarget;
+		public UnityEngine.UI.Graphic graphicTarget;
+		public Material materialTarget;
+		public int materialIndex = 0;
 		public string propertyName = "_BaseColor";
 		public bool animateFromCurrent = false;
 		public float from = 0f;
 		public float to = 1f;
-		public override AnimType GetAnimType() { return AnimType.MaterialFloat; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.rendererTarget = rendererTarget; s.materialPropertyName = propertyName; s.animateFromCurrent = animateFromCurrent; s.materialFloatFrom = from; s.materialFloatTo = to; }
+
+		// Zeigt jetzt auf den NEUEN Master-Typen!
+		public override AnimType GetAnimType() { return AnimType.MaterialProperty; }
+
+		public override void ApplyTo(AnimSequencer.AnimStep s) {
+			base.ApplyTo(s);
+			s.rendererTarget = rendererTarget;
+			s.graphicTarget = graphicTarget;
+			s.materialTarget = materialTarget;
+			s.materialIndex = materialIndex;
+			s.materialPropertyName = propertyName;
+			s.materialPropertyType = MaterialPropertyType.Float;
+			s.animateFromCurrent = animateFromCurrent;
+			s.materialFloatFrom = from;
+			s.materialFloatTo = to;
+		}
 	}
 
 	public class MaterialColorConfig : TweenConfig {
 		public Renderer rendererTarget;
+		public UnityEngine.UI.Graphic graphicTarget;
+		public Material materialTarget;
+		public int materialIndex = 0;
 		public string propertyName = "_BaseColor";
 		public bool animateFromCurrent = false;
 		public Color from = Color.white;
 		public Color to = Color.white;
-		public override AnimType GetAnimType() { return AnimType.MaterialColor; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.rendererTarget = rendererTarget; s.materialPropertyName = propertyName; s.animateFromCurrent = animateFromCurrent; s.materialColorFrom = from; s.materialColorTo = to; }
+
+		public override AnimType GetAnimType() { return AnimType.MaterialProperty; }
+
+		public override void ApplyTo(AnimSequencer.AnimStep s) {
+			base.ApplyTo(s);
+			s.rendererTarget = rendererTarget;
+			s.graphicTarget = graphicTarget;
+			s.materialTarget = materialTarget;
+			s.materialIndex = materialIndex;
+			s.materialPropertyName = propertyName;
+			s.materialPropertyType = MaterialPropertyType.Color;
+			s.animateFromCurrent = animateFromCurrent;
+			s.materialColorFrom = from;
+			s.materialColorTo = to;
+		}
 	}
 	#endregion
 
@@ -347,15 +388,15 @@ namespace Sperlich.Sequencer {
 		public TransformSubType subType = TransformSubType.LocalPosition;
 		public Vector3 value = Vector3.zero;
 		public bool relativeOffset = false;
-		public override AnimType GetAnimType() { return AnimType.SetTransform; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.target = target; s.transformSubType = subType; s.setTransformValue = value; s.relativeOffset = relativeOffset; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.Transform; s.target = target; s.transformSubType = subType; s.setTransformValue = value; s.relativeOffset = relativeOffset; }
 	}
 
 	public class SetActiveConfig : AnimConfig {
 		public Transform target;
 		public bool active = true;
-		public override AnimType GetAnimType() { return AnimType.SetActive; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.target = target; s.setActiveValue = active; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.Active; s.target = target; s.setActiveValue = active; }
 	}
 
 	public class SetCanvasGroupStateConfig : AnimConfig {
@@ -363,66 +404,105 @@ namespace Sperlich.Sequencer {
 		public OptionalBool interactable = OptionalBool.Unchanged;
 		public OptionalBool blocksRaycasts = OptionalBool.Unchanged;
 		public OptionalBool ignoreParentGroups = OptionalBool.Unchanged;
-		public override AnimType GetAnimType() { return AnimType.SetCanvasGroupState; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.target = target; s.cgInteractable = interactable; s.cgBlocksRaycasts = blocksRaycasts; s.cgIgnoreParentGroups = ignoreParentGroups; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.CanvasGroupState; s.target = target; s.cgInteractable = interactable; s.cgBlocksRaycasts = blocksRaycasts; s.cgIgnoreParentGroups = ignoreParentGroups; }
 	}
 
 	public class SetColorConfig : AnimConfig {
 		public Transform target;
 		public Color color = Color.white;
 		public ColorTargetType colorTarget = ColorTargetType.Image;
-		public override AnimType GetAnimType() { return AnimType.SetColor; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.target = target; s.colorTo = color; s.colorTarget = colorTarget; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.Color; s.target = target; s.colorTo = color; s.colorTarget = colorTarget; }
 	}
 
 	public class SetTextConfig : AnimConfig {
 		public TMP_Text tmpTarget;
 		public string text = "";
-		public override AnimType GetAnimType() { return AnimType.SetText; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.tmpTarget = tmpTarget; s.setTextValue = text; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.Text; s.tmpTarget = tmpTarget; s.setTextValue = text; }
 	}
 
 	public class SetSpriteConfig : AnimConfig {
 		public SpriteRenderer spriteTarget;
 		public Sprite sprite;
-		public override AnimType GetAnimType() { return AnimType.SetSprite; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.spriteTarget = spriteTarget; s.setSpriteValue = sprite; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.Sprite; s.spriteTarget = spriteTarget; s.setSpriteValue = sprite; }
 	}
 
 	public class SetImageConfig : AnimConfig {
 		public Image imageTarget;
 		public Sprite sprite;
-		public override AnimType GetAnimType() { return AnimType.SetImage; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.imageTarget = imageTarget; s.setSpriteValue = sprite; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.Image; s.imageTarget = imageTarget; s.setSpriteValue = sprite; }
 	}
 
 	public class SetFadeConfig : AnimConfig {
 		public Transform target;
 		public float alpha = 1f;
-		public override AnimType GetAnimType() { return AnimType.SetFade; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.target = target; s.setFadeValue = alpha; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.Fade; s.target = target; s.setFadeValue = alpha; }
 	}
 
 	public class SetTimeScaleConfig : AnimConfig {
 		public float timeScale = 1f;
-		public override AnimType GetAnimType() { return AnimType.SetTimeScale; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.timeScaleTo = timeScale; }
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.TimeScale; s.timeScaleTo = timeScale; }
+	}
+
+	public class SetSizeDeltaConfig : AnimConfig {
+		public Transform target;
+		public Vector2 size = Vector2.zero;
+		public bool relativeOffset = false;
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.SizeDelta; s.target = target; s.setSizeDeltaValue = size; s.relativeOffset = relativeOffset; }
+	}
+
+	public class SetPivotConfig : AnimConfig {
+		public Transform target;
+		public Vector2 pivot = new Vector2(0.5f, 0.5f);
+		public override AnimType GetAnimType() { return AnimType.SetProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.setPropertyType = SetPropertyType.Pivot; s.target = target; s.setPivotValue = pivot; }
 	}
 
 	public class SetMaterialFloatConfig : AnimConfig {
 		public Renderer rendererTarget;
+		public Graphic graphicTarget;
+		public Material materialTarget;
+		public int materialIndex = 0;
 		public string propertyName = "_BaseColor";
 		public float value = 1f;
-		public override AnimType GetAnimType() { return AnimType.SetMaterialFloat; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.rendererTarget = rendererTarget; s.materialPropertyName = propertyName; s.materialFloatTo = value; }
+		public override AnimType GetAnimType() { return AnimType.SetMaterialProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) {
+			base.ApplyTo(s);
+			s.rendererTarget = rendererTarget;
+			s.graphicTarget = graphicTarget;
+			s.materialTarget = materialTarget;
+			s.materialIndex = materialIndex;
+			s.materialPropertyName = propertyName;
+			s.materialPropertyType = MaterialPropertyType.Float;
+			s.materialFloatTo = value;
+		}
 	}
 
 	public class SetMaterialColorConfig : AnimConfig {
 		public Renderer rendererTarget;
+		public Graphic graphicTarget;
+		public Material materialTarget;
+		public int materialIndex = 0;
 		public string propertyName = "_BaseColor";
 		public Color value = Color.white;
-		public override AnimType GetAnimType() { return AnimType.SetMaterialColor; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.rendererTarget = rendererTarget; s.materialPropertyName = propertyName; s.materialColorTo = value; }
+		public override AnimType GetAnimType() { return AnimType.SetMaterialProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) {
+			base.ApplyTo(s);
+			s.rendererTarget = rendererTarget;
+			s.graphicTarget = graphicTarget;
+			s.materialTarget = materialTarget;
+			s.materialIndex = materialIndex;
+			s.materialPropertyName = propertyName;
+			s.materialPropertyType = MaterialPropertyType.Color;
+			s.materialColorTo = value;
+		}
 	}
 	#endregion
 
@@ -468,5 +548,74 @@ namespace Sperlich.Sequencer {
 		public override AnimType GetAnimType() { return AnimType.Repeat; }
 		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.repeatAnchorLabel = targetAnchor; }
 	}
+
+	public class MaterialPropertyConfig : TweenConfig {
+		public Renderer rendererTarget;
+		public Material materialTarget;
+		public Graphic graphicTarget;
+		public int materialIndex = 0;
+		public string propertyName = "_BaseColor";
+		public MaterialPropertyType propertyType = MaterialPropertyType.Float;
+		public bool animateFromCurrent = false;
+		public float floatFrom = 0f;
+		public float floatTo = 1f;
+		public Color colorFrom = Color.white;
+		public Color colorTo = Color.white;
+		public override AnimType GetAnimType() { return AnimType.MaterialProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) {
+			base.ApplyTo(s);
+			s.rendererTarget = rendererTarget;
+			s.materialTarget = materialTarget;
+			s.materialIndex = materialIndex;
+			s.materialPropertyName = propertyName;
+			s.materialPropertyType = propertyType;
+			s.animateFromCurrent = animateFromCurrent;
+			s.materialFloatFrom = floatFrom;
+			s.materialFloatTo = floatTo;
+			s.materialColorFrom = colorFrom;
+			s.materialColorTo = colorTo;
+		}
+	}
+
+	public class SetMaterialPropertyConfig : AnimConfig {
+		public Renderer rendererTarget;
+		public Material materialTarget;
+		public Graphic graphicTarget;
+		public int materialIndex = 0;
+		public string propertyName = "_BaseColor";
+		public MaterialPropertyType propertyType = MaterialPropertyType.Float;
+		public float floatValue = 1f;
+		public Color colorValue = Color.white;
+		public override AnimType GetAnimType() { return AnimType.SetMaterialProperty; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) {
+			base.ApplyTo(s);
+			s.rendererTarget = rendererTarget;
+			s.materialTarget = materialTarget;
+			s.materialIndex = materialIndex;
+			s.materialPropertyName = propertyName;
+			s.materialPropertyType = propertyType;
+			s.materialFloatTo = floatValue;
+			s.materialColorTo = colorValue;
+		}
+	}
+
+	public class ControlSequenceConfig : AnimConfig {
+		public SequenceControlType action = SequenceControlType.Stop;
+		public SequenceControlTarget targetScope = SequenceControlTarget.Self;
+		public AnimSequencer targetSequencer;
+		public string targetLabel = "";
+
+		public override AnimType GetAnimType() { return AnimType.ControlSequence; }
+
+		public override void ApplyTo(AnimSequencer.AnimStep s) {
+			base.ApplyTo(s);
+			s.sequenceControlType = action;
+			s.sequenceControlTarget = targetScope;
+			s.controlSequencerTarget = targetSequencer;
+			s.controlSequenceLabel = targetLabel;
+		}
+	}
 	#endregion
+
+
 }

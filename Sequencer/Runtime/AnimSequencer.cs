@@ -76,6 +76,11 @@ namespace Sperlich.Sequencer {
 		void Update() {
 			for (int i = _pollingWaits.Count - 1; i >= 0; i--) {
 				var state = _pollingWaits[i];
+
+				if (state.seq.isPaused) {
+					continue;
+				}
+
 				bool conditionMet = false;
 
 				if (!state.step.enabled) {
@@ -168,31 +173,110 @@ namespace Sperlich.Sequencer {
 		}
 
 		public void Pause(string sequenceLabel) {
-			if (_activeSequences.TryGetValue(sequenceLabel, out var list)) {
-				foreach (var s in list) if (s.isAlive) Tween.SetPausedAll(true, this);
+			var seq = sequences.Find(s => s.label == sequenceLabel);
+			if (seq != null) {
+				SetPausedInternal(seq, true);
 			}
 		}
-
 		public void Resume(string sequenceLabel) {
-			if (_activeSequences.TryGetValue(sequenceLabel, out var list)) {
-				foreach (var s in list) if (s.isAlive) Tween.SetPausedAll(false, this);
+			var seq = sequences.Find(s => s.label == sequenceLabel);
+			if (seq != null) {
+				SetPausedInternal(seq, false);
 			}
 		}
 
-		public void PauseAll() { Tween.SetPausedAll(true, this); }
-		public void ResumeAll() { Tween.SetPausedAll(false, this); }
+		#region Sequence Control API
+		public void StopByLabel(string label) {
+			var seq = sequences.Find(s => s.label == label);
+			if (seq != null) {
+				StopSequenceInternal(seq);
+			}
+		}
+		public void StopAll() {
+			var all = new List<AnimSequence>(sequences);
+			foreach (var seq in all) {
+				StopSequenceInternal(seq);
+			}
+		}
+		public void CompleteByLabel(string label) {
+			var seq = sequences.Find(s => s.label == label);
+			if (seq != null) {
+				CompleteSequenceInternal(seq);
+			}
+		}
+		public void CompleteAll() {
+			var all = new List<AnimSequence>(sequences);
+			foreach (var seq in all) {
+				CompleteSequenceInternal(seq);
+			}
+		}
+		public void PauseByLabel(string label) {
+			var seq = sequences.Find(s => s.label == label);
+			if (seq != null) {
+				SetPausedInternal(seq, true);
+			}
+		}
+		public void PauseAll() {
+			foreach (var seq in sequences) {
+				SetPausedInternal(seq, true);
+			}
+		}
+		public void ResumeByLabel(string label) {
+			var seq = sequences.Find(s => s.label == label);
+			if (seq != null) {
+				SetPausedInternal(seq, false);
+			}
+		}
+		public void ResumeAll() {
+			foreach (var seq in sequences) {
+				SetPausedInternal(seq, false);
+			}
+		}
 
-		public void StopByLabel(string sequenceLabel) {
-			if (_activeSequences.TryGetValue(sequenceLabel, out var list)) {
-				foreach (var s in list.ToList()) {
-					if (s.isAlive) {
-						s.Stop();
-					}
+		void StopSequenceInternal(AnimSequence seq) {
+			if (seq == null) return;
+
+			foreach (var tween in seq.activeTweens) {
+				if (tween.isAlive) {
+					tween.Stop();
 				}
-				_activeSequences.Remove(sequenceLabel);
 			}
-			_pollingWaits.RemoveAll(w => w.seq.label == sequenceLabel);
+
+			seq.activeTweens.Clear();
+			_pollingWaits.RemoveAll(w => w.seq == seq);
+
+			seq.isPlaying = false;
+			if (editorPlayingSeqIndex == sequences.IndexOf(seq)) {
+				editorPlayingSeqIndex = -1;
+			}
 		}
+		void CompleteSequenceInternal(AnimSequence seq) {
+			if (seq == null) return;
+
+			foreach (var tween in seq.activeTweens.ToList()) {
+				if (tween.isAlive) {
+					tween.Complete();
+				}
+			}
+			seq.activeTweens.Clear();
+
+			_pollingWaits.RemoveAll(w => w.seq == seq);
+			FinishSequence(seq, sequences.IndexOf(seq), false);
+		}
+		void SetPausedInternal(AnimSequence seq, bool paused) {
+			if (seq == null) {
+				return;
+			}
+
+			seq.isPaused = paused;
+
+			foreach (var tween in seq.activeTweens) {
+				if (tween.isAlive) {
+					tween.isPaused = paused;
+				}
+			}
+		}
+		#endregion
 
 		void PlayDisableSequences() {
 			foreach (var seq in sequences) {
@@ -204,24 +288,19 @@ namespace Sperlich.Sequencer {
 
 		public void PlaySequence(AnimSequence seq, bool isDisable = false) {
 			if (seq.steps == null || seq.steps.Count == 0) {
-				if (seq.onCompleteAction != null) seq.onCompleteAction.Invoke();
+				seq.onCompleteAction?.Invoke();
 				if (seq.isTemporary) sequences.Remove(seq);
 				return;
 			}
 
+			// Falls die Sequenz bereits läuft, stoppen wir sie sauber vor dem Neustart
+			StopSequenceInternal(seq);
+
 			seq.isPlaying = true;
-
-			string label = seq.label ?? "";
-			if (!string.IsNullOrEmpty(label)) {
-				StopByLabel(label);
-				_activeSequences[label] = new List<Sequence>();
-			}
-
-			if (seq.onStart != null) seq.onStart.Invoke();
-			if (seq.onStartAction != null) seq.onStartAction.Invoke();
+			seq.onStart?.Invoke();
+			seq.onStartAction?.Invoke();
 
 			int seqIndex = sequences.IndexOf(seq);
-
 			if (!isDisable) {
 				editorStepProgress = new float[seq.steps.Count];
 				editorPlayingSeqIndex = seqIndex;
@@ -237,11 +316,9 @@ namespace Sperlich.Sequencer {
 			}
 
 			var s = Sequence.Create();
-			string label = seq.label ?? "";
 
-			if (!string.IsNullOrEmpty(label) && _activeSequences.ContainsKey(label)) {
-				_activeSequences[label].Add(s);
-			}
+			// Tracking für PrimeTween
+			seq.activeTweens.Add(s);
 
 			float maxGroupTime = 0f;
 			float groupStartTime = 0f;
@@ -277,6 +354,7 @@ namespace Sperlich.Sequencer {
 					endsSliceEarly = true;
 
 					s.Group(Tween.Delay(Mathf.Max(triggerTime, 0.001f)).OnComplete(() => {
+						if (!seq.isPlaying) return; // SCHUTZ: Slice nicht weiterführen, wenn gestoppt
 						HandleSliceBreak(bType, capturedStep, seq, seqIndex, breakIndex, rAnchor, isDisable);
 					}));
 
@@ -308,11 +386,13 @@ namespace Sperlich.Sequencer {
 					float d = step.delay + currentTime;
 
 					if (d <= 0f) {
-						ExecuteInstantStep(seq.steps[ci], ct);
+						ExecuteInstantStep(seq, seq.steps[ci], ct);
+						if (!seq.isPlaying) return; // WICHTIGSTER FIX: Schleife sofort abbrechen, wenn Instant-Step die Sequenz beendet hat!
 						s.Group(Tween.Delay(0.001f));
 					} else {
 						s.Group(Tween.Delay(d).OnComplete(() => {
-							ExecuteInstantStep(seq.steps[ci], ct);
+							if (!seq.isPlaying) return; // SCHUTZ: Verhindern, dass verzögerte Instant-Steps noch feuern
+							ExecuteInstantStep(seq, seq.steps[ci], ct);
 						}));
 					}
 				} else if (!IsLogicType(step.type)) {
@@ -326,7 +406,7 @@ namespace Sperlich.Sequencer {
 							float delayTime = step.delay + currentTime;
 
 							s.Group(Tween.Delay(Mathf.Max(delayTime, 0.001f)).OnComplete(() => {
-								if (t == null) return;
+								if (!seq.isPlaying || t == null) return; // SCHUTZ: Keine Transform-Resets mehr anwenden
 								if (tp == AnimType.Bounce || tp == AnimType.ShakePosition) t.localPosition = ip;
 								else if (tp == AnimType.PunchScale) t.localScale = isc;
 								else if (tp == AnimType.PunchRotate || tp == AnimType.ShakeRotation) t.localEulerAngles = ir;
@@ -336,6 +416,7 @@ namespace Sperlich.Sequencer {
 					s.Group(BuildTween(step, step.resolvedTarget, currentTime));
 				}
 
+				// EDITOR PROGRESS LOGIK (wieder da)
 				if (!isDisable && seqIndex >= 0) {
 					int ci = i;
 					int cs = seqIndex;
@@ -351,13 +432,9 @@ namespace Sperlich.Sequencer {
 			}
 
 			int breakEndIndex = i;
-			var capturedS = s;
 
 			s.ChainCallback(() => {
-				if (!string.IsNullOrEmpty(label) && _activeSequences.ContainsKey(label)) {
-					_activeSequences[label].Remove(capturedS);
-				}
-
+				seq.activeTweens.Remove(s);
 				if (breakEndIndex >= seq.steps.Count && !endsSliceEarly) {
 					FinishSequence(seq, seqIndex, isDisable);
 				}
@@ -381,6 +458,10 @@ namespace Sperlich.Sequencer {
 		}
 
 		void FinishSequence(AnimSequence seq, int seqIndex, bool isDisable) {
+			if (!seq.isPlaying) {
+				return;
+			}
+
 			seq.isPlaying = false;
 
 			if (seq.onEnd != null) seq.onEnd.Invoke();
@@ -418,57 +499,86 @@ namespace Sperlich.Sequencer {
 		}
 
 		void InitStepCache(AnimStep step) {
-			bool needsHeal = false;
-
-			if (step.isInitialized) {
-				if (step.resolvedTarget == null) needsHeal = true;
-				else if (step.isUI) {
-					if ((step.type == AnimType.ColorTint || step.type == AnimType.SetColor) && step.cachedGraphic == null) needsHeal = true;
-					if ((step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || step.type == AnimType.SetText) && step.cachedText == null) needsHeal = true;
-					if ((step.type == AnimType.Fade || step.type == AnimType.SetFade || step.type == AnimType.SetCanvasGroupState) && step.cachedCanvasGroup == null) needsHeal = true;
-					if ((step.type == AnimType.SetImage || step.type == AnimType.FillAmount) && step.cachedImage == null) needsHeal = true;
-				} else {
-					if ((step.type == AnimType.SetSprite || step.type == AnimType.FadeSpriteColor) && step.cachedSpriteRenderer == null) needsHeal = true;
-				}
-				if ((step.type == AnimType.PlayAudio || step.type == AnimType.FadeAudio) && step.cachedAudioSource == null) needsHeal = true;
-				if ((step.type == AnimType.MaterialFloat || step.type == AnimType.MaterialColor || step.type == AnimType.SetMaterialFloat || step.type == AnimType.SetMaterialColor) && step.cachedRenderer == null) needsHeal = true;
-
-				if (!needsHeal) return;
+			if (step.type == AnimType.Trigger || step.type == AnimType.Event || step.type == AnimType.PlayAudio ||
+				step.type == AnimType.SetProperty || step.type == AnimType.SetMaterialProperty || step.type == AnimType.ControlSequence) {
+				step.duration = 0f;
 			}
 
-			step.resolvedTarget = step.target != null ? step.target : this.transform;
+			bool needsHeal = false;
+
+			// Runtime Target Healing Check
+			Transform intendedTarget = step.target != null ? step.target : this.transform;
+			if (step.isInitialized && step.resolvedTarget != intendedTarget) {
+				needsHeal = true;
+			}
+
+			if (step.isInitialized) {
+				if (step.resolvedTarget == null) {
+					needsHeal = true;
+				} else if (step.isUI) {
+					if ((step.type == AnimType.ColorTint || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Color)) && step.cachedGraphic == null) {
+						needsHeal = true;
+					}
+					if ((step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Text)) && step.cachedText == null) {
+						needsHeal = true;
+					}
+					if ((step.type == AnimType.Fade || (step.type == AnimType.SetProperty && (step.setPropertyType == SetPropertyType.Fade || step.setPropertyType == SetPropertyType.CanvasGroupState))) && step.cachedCanvasGroup == null) {
+						needsHeal = true;
+					}
+					if ((step.type == AnimType.FillAmount || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Image)) && step.cachedImage == null) {
+						needsHeal = true;
+					}
+				} else {
+					if ((step.type == AnimType.FadeSpriteColor || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Sprite)) && step.cachedSpriteRenderer == null) {
+						needsHeal = true;
+					}
+				}
+				if ((step.type == AnimType.PlayAudio || step.type == AnimType.FadeAudio) && step.cachedAudioSource == null) {
+					needsHeal = true;
+				}
+				if ((step.type == AnimType.MaterialProperty || step.type == AnimType.SetMaterialProperty) && step.cachedMaterial == null) {
+					needsHeal = true;
+				}
+
+				if (!needsHeal) {
+					return;
+				}
+			}
+
+			step.resolvedTarget = intendedTarget;
 			step.rectTarget = step.resolvedTarget as RectTransform;
 			step.isUI = step.rectTarget != null;
 
-			if (!step.isInitialized) {
+			if (!step.isInitialized || needsHeal) {
 				step.initialLocalPosition = step.resolvedTarget.localPosition;
 				step.initialLocalRotation = step.resolvedTarget.localEulerAngles;
 				step.initialLocalScale = step.resolvedTarget.localScale;
 				if (step.isUI) {
 					step.initialAnchoredPosition = step.rectTarget.anchoredPosition;
 					step.initialSizeDelta = step.rectTarget.sizeDelta;
+					step.initialPivot = step.rectTarget.pivot;
 				}
 			}
 
-			if (step.type == AnimType.ColorTint || step.type == AnimType.SetColor) {
+			if (step.type == AnimType.ColorTint || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Color)) {
 				step.cachedGraphic = step.resolvedTarget.GetComponent<Graphic>();
 				step.cachedText = step.resolvedTarget.GetComponent<TMP_Text>();
 				step.cachedSpriteRenderer = step.resolvedTarget.GetComponent<SpriteRenderer>();
 			}
 
-			if (step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || step.type == AnimType.SetText) {
+			if (step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Text)) {
 				step.cachedText = step.tmpTarget != null ? step.tmpTarget : step.resolvedTarget.GetComponent<TMP_Text>();
 			}
 
-			if (step.type == AnimType.Fade || step.type == AnimType.SetFade || step.type == AnimType.SetCanvasGroupState) {
+			if (step.type == AnimType.Fade || (step.type == AnimType.SetProperty && (step.setPropertyType == SetPropertyType.Fade || step.setPropertyType == SetPropertyType.CanvasGroupState))) {
 				step.cachedCanvasGroup = step.resolvedTarget.GetComponent<CanvasGroup>();
 			}
 
-			if (step.type == AnimType.SetImage || step.type == AnimType.FillAmount) {
+			if (step.type == AnimType.FillAmount || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Image)) {
 				step.cachedImage = step.imageTarget != null ? step.imageTarget : step.resolvedTarget.GetComponent<Image>();
 			}
 
-			if (step.type == AnimType.SetSprite || step.type == AnimType.FadeSpriteColor) {
+			if (step.type == AnimType.FadeSpriteColor || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Sprite)) {
 				step.cachedSpriteRenderer = step.spriteTarget != null ? step.spriteTarget : step.resolvedTarget.GetComponent<SpriteRenderer>();
 			}
 
@@ -476,8 +586,22 @@ namespace Sperlich.Sequencer {
 				step.cachedAudioSource = step.audioTarget != null ? step.audioTarget : step.resolvedTarget.GetComponent<AudioSource>();
 			}
 
-			if (step.type == AnimType.MaterialFloat || step.type == AnimType.MaterialColor || step.type == AnimType.SetMaterialFloat || step.type == AnimType.SetMaterialColor) {
-				step.cachedRenderer = step.rendererTarget != null ? step.rendererTarget : step.resolvedTarget.GetComponent<Renderer>();
+			if (step.type == AnimType.MaterialProperty || step.type == AnimType.SetMaterialProperty) {
+				if (step.materialTarget != null) {
+					step.cachedMaterial = step.materialTarget;
+				} else {
+					step.cachedRenderer = step.rendererTarget != null ? step.rendererTarget : step.resolvedTarget.GetComponent<Renderer>();
+					if (step.cachedRenderer != null) {
+						if (step.materialIndex >= 0 && step.materialIndex < step.cachedRenderer.sharedMaterials.Length) {
+							step.cachedMaterial = step.cachedRenderer.materials[step.materialIndex];
+						}
+					} else {
+						var graphic = step.graphicTarget != null ? step.graphicTarget : step.resolvedTarget.GetComponent<Graphic>();
+						if (graphic != null && graphic.material != null) {
+							step.cachedMaterial = graphic.material;
+						}
+					}
+				}
 				if (!string.IsNullOrEmpty(step.materialPropertyName)) {
 					step.cachedMaterialPropertyId = Shader.PropertyToID(step.materialPropertyName);
 				}
@@ -486,66 +610,147 @@ namespace Sperlich.Sequencer {
 			step.isInitialized = true;
 		}
 
-		static bool IsInstantType(AnimType type) {
-			return type == AnimType.SetTransform || type == AnimType.SetText || type == AnimType.SetColor ||
-				   type == AnimType.SetActive || type == AnimType.Trigger || type == AnimType.Event ||
-				   type == AnimType.SetSprite || type == AnimType.SetImage || type == AnimType.SetFade ||
-				   type == AnimType.SetCanvasGroupState || type == AnimType.PlayAudio || type == AnimType.SetTimeScale ||
-				   type == AnimType.SetMaterialFloat || type == AnimType.SetMaterialColor;
+		static bool IsInstantType(AnimType t) {
+			return t == AnimType.Trigger ||
+				   t == AnimType.Event ||
+				   t == AnimType.PlayAudio ||
+				   t == AnimType.SetProperty ||
+				   t == AnimType.SetMaterialProperty ||
+				   t == AnimType.ControlSequence;
 		}
 
 		static bool IsLogicType(AnimType type) {
 			return type == AnimType.Anchor || type == AnimType.Repeat || type == AnimType.WaitUntil;
 		}
 
-		void ExecuteInstantStep(AnimStep step, Transform target) {
+		void ExecuteInstantStep(AnimSequence parentSeq, AnimStep step, Transform target) {
+			Transform t = step.resolvedTarget;
+
 			switch (step.type) {
-				case AnimType.Event: if (step.onEvent != null) step.onEvent.Invoke(); break;
+				case AnimType.Event:
+					if (step.onEvent != null) {
+						step.onEvent.Invoke();
+					}
+					break;
 				case AnimType.Trigger:
 					if (!string.IsNullOrEmpty(step.triggerSequenceLabel)) {
 						AnimSequencer seqTarget = step.triggerSequencer != null ? step.triggerSequencer : this;
 						Tween.Delay(0.001f, useUnscaledTime: true).OnComplete(() => {
-							if (seqTarget != null && seqTarget.gameObject.activeInHierarchy) seqTarget.PlayByLabel(step.triggerSequenceLabel);
+							if (seqTarget != null && seqTarget.gameObject.activeInHierarchy) {
+								seqTarget.PlayByLabel(step.triggerSequenceLabel);
+							}
 						});
 					}
 					break;
-				case AnimType.SetActive:
-					if (target != null) {
-						if (!step.setActiveValue) {
-							try { _internalDisable = true; target.gameObject.SetActive(false); } finally { _internalDisable = false; }
-						} else target.gameObject.SetActive(true);
+				case AnimType.SetMaterialProperty:
+					if (step.cachedMaterial != null) {
+						if (step.materialPropertyType == MaterialPropertyType.Float) {
+							step.cachedMaterial.SetFloat(step.cachedMaterialPropertyId, step.materialFloatTo);
+						} else if (step.materialPropertyType == MaterialPropertyType.Color) {
+							step.cachedMaterial.SetColor(step.cachedMaterialPropertyId, step.materialColorTo);
+						}
 					}
 					break;
-				case AnimType.SetTransform:
-					switch (step.transformSubType) {
-						case TransformSubType.LocalPosition:
-							if (step.relativeOffset) target.localPosition += step.setTransformValue;
-							else target.localPosition = step.setTransformValue;
+				case AnimType.SetProperty:
+					switch (step.setPropertyType) {
+						case SetPropertyType.Active:
+							if (t != null) {
+								if (!step.setActiveValue) {
+									try {
+										_internalDisable = true;
+										t.gameObject.SetActive(false);
+									} finally {
+										_internalDisable = false;
+									}
+								} else {
+									t.gameObject.SetActive(true);
+								}
+							}
 							break;
-						case TransformSubType.LocalRotation:
-							if (step.relativeOffset) target.localEulerAngles += step.setTransformValue;
-							else target.localEulerAngles = step.setTransformValue;
+						case SetPropertyType.Transform:
+							switch (step.transformSubType) {
+								case TransformSubType.LocalPosition:
+									if (step.relativeOffset) {
+										t.localPosition += step.setTransformValue;
+									} else {
+										t.localPosition = step.setTransformValue;
+									}
+									break;
+								case TransformSubType.LocalRotation:
+									if (step.relativeOffset) {
+										t.localEulerAngles += step.setTransformValue;
+									} else {
+										t.localEulerAngles = step.setTransformValue;
+									}
+									break;
+								case TransformSubType.LocalScale:
+									if (step.relativeOffset) {
+										t.localScale += step.setTransformValue;
+									} else {
+										t.localScale = step.setTransformValue;
+									}
+									break;
+							}
 							break;
-						case TransformSubType.LocalScale:
-							if (step.relativeOffset) target.localScale += step.setTransformValue;
-							else target.localScale = step.setTransformValue;
+						case SetPropertyType.Text:
+							if (step.cachedText != null) {
+								step.cachedText.text = step.setTextValue;
+							}
 							break;
-					}
-					break;
-				case AnimType.SetText: if (step.cachedText != null) step.cachedText.text = step.setTextValue; break;
-				case AnimType.SetColor:
-					if (step.cachedGraphic != null) step.cachedGraphic.color = step.colorTo;
-					else if (step.cachedText != null) step.cachedText.color = step.colorTo;
-					else if (step.cachedSpriteRenderer != null) step.cachedSpriteRenderer.color = step.colorTo;
-					break;
-				case AnimType.SetSprite: if (step.cachedSpriteRenderer != null) step.cachedSpriteRenderer.sprite = step.setSpriteValue; break;
-				case AnimType.SetImage: if (step.cachedImage != null) step.cachedImage.sprite = step.setSpriteValue; break;
-				case AnimType.SetFade: if (step.cachedCanvasGroup != null) step.cachedCanvasGroup.alpha = step.setFadeValue; break;
-				case AnimType.SetCanvasGroupState:
-					if (step.cachedCanvasGroup != null) {
-						if (step.cgInteractable != OptionalBool.Unchanged) step.cachedCanvasGroup.interactable = step.cgInteractable == OptionalBool.True;
-						if (step.cgBlocksRaycasts != OptionalBool.Unchanged) step.cachedCanvasGroup.blocksRaycasts = step.cgBlocksRaycasts == OptionalBool.True;
-						if (step.cgIgnoreParentGroups != OptionalBool.Unchanged) step.cachedCanvasGroup.ignoreParentGroups = step.cgIgnoreParentGroups == OptionalBool.True;
+						case SetPropertyType.Color:
+							if (step.cachedGraphic != null) {
+								step.cachedGraphic.color = step.colorTo;
+							} else if (step.cachedText != null) {
+								step.cachedText.color = step.colorTo;
+							} else if (step.cachedSpriteRenderer != null) {
+								step.cachedSpriteRenderer.color = step.colorTo;
+							}
+							break;
+						case SetPropertyType.Sprite:
+							if (step.cachedSpriteRenderer != null) {
+								step.cachedSpriteRenderer.sprite = step.setSpriteValue;
+							}
+							break;
+						case SetPropertyType.Image:
+							if (step.cachedImage != null) {
+								step.cachedImage.sprite = step.setSpriteValue;
+							}
+							break;
+						case SetPropertyType.Fade:
+							if (step.cachedCanvasGroup != null) {
+								step.cachedCanvasGroup.alpha = step.setFadeValue;
+							}
+							break;
+						case SetPropertyType.CanvasGroupState:
+							if (step.cachedCanvasGroup != null) {
+								if (step.cgInteractable != OptionalBool.Unchanged) {
+									step.cachedCanvasGroup.interactable = step.cgInteractable == OptionalBool.True;
+								}
+								if (step.cgBlocksRaycasts != OptionalBool.Unchanged) {
+									step.cachedCanvasGroup.blocksRaycasts = step.cgBlocksRaycasts == OptionalBool.True;
+								}
+								if (step.cgIgnoreParentGroups != OptionalBool.Unchanged) {
+									step.cachedCanvasGroup.ignoreParentGroups = step.cgIgnoreParentGroups == OptionalBool.True;
+								}
+							}
+							break;
+						case SetPropertyType.TimeScale:
+							Time.timeScale = step.timeScaleTo;
+							break;
+						case SetPropertyType.SizeDelta:
+							if (step.isUI && step.rectTarget != null) {
+								if (step.relativeOffset) {
+									step.rectTarget.sizeDelta = step.initialSizeDelta + step.setSizeDeltaValue;
+								} else {
+									step.rectTarget.sizeDelta = step.setSizeDeltaValue;
+								}
+							}
+							break;
+						case SetPropertyType.Pivot:
+							if (step.isUI && step.rectTarget != null) {
+								step.rectTarget.pivot = step.setPivotValue;
+							}
+							break;
 					}
 					break;
 				case AnimType.PlayAudio:
@@ -555,17 +760,32 @@ namespace Sperlich.Sequencer {
 						step.cachedAudioSource.PlayOneShot(step.audioClip, Random.Range(step.audioVolume.x, step.audioVolume.y));
 					}
 					break;
-				case AnimType.SetTimeScale:
-					Time.timeScale = step.timeScaleTo;
-					break;
-				case AnimType.SetMaterialFloat:
-					if (step.cachedRenderer != null) {
-						step.cachedRenderer.material.SetFloat(step.cachedMaterialPropertyId, step.materialFloatTo);
-					}
-					break;
-				case AnimType.SetMaterialColor:
-					if (step.cachedRenderer != null) {
-						step.cachedRenderer.material.SetColor(step.cachedMaterialPropertyId, step.materialColorTo);
+				case AnimType.ControlSequence:
+					AnimSequencer ctrlSeq = step.controlSequencerTarget != null ? step.controlSequencerTarget : this;
+					if (ctrlSeq != null) {
+						List<AnimSequence> targets = new List<AnimSequence>();
+
+						if (step.sequenceControlTarget == SequenceControlTarget.Self) {
+							if (parentSeq != null) {
+								targets.Add(parentSeq);
+							}
+						} else if (step.sequenceControlTarget == SequenceControlTarget.Specific && !string.IsNullOrEmpty(step.controlSequenceLabel)) {
+							var found = ctrlSeq.sequences.Find(s => s.label == step.controlSequenceLabel);
+							if (found != null) {
+								targets.Add(found);
+							}
+						} else if (step.sequenceControlTarget == SequenceControlTarget.All) {
+							targets.AddRange(ctrlSeq.sequences);
+						}
+
+						foreach (var tSeq in targets) {
+							switch (step.sequenceControlType) {
+								case SequenceControlType.Stop: ctrlSeq.StopSequenceInternal(tSeq); break;
+								case SequenceControlType.Complete: ctrlSeq.CompleteSequenceInternal(tSeq); break;
+								case SequenceControlType.Pause: ctrlSeq.SetPausedInternal(tSeq, true); break;
+								case SequenceControlType.Resume: ctrlSeq.SetPausedInternal(tSeq, false); break;
+							}
+						}
 					}
 					break;
 			}
@@ -574,119 +794,198 @@ namespace Sperlich.Sequencer {
 		Tween BuildTween(AnimStep step, Transform target, float absoluteDelay) {
 			var settings = MakeSettings(step, absoluteDelay);
 			var unscaledSettings = MakeSettings(step, absoluteDelay, unscaledTime: true);
+			Transform t = step.resolvedTarget;
 
 			switch (step.type) {
 				case AnimType.Fade:
 					if (step.cachedCanvasGroup != null) {
-						if (step.animateFromCurrent) return Tween.Alpha(step.cachedCanvasGroup, step.fadeTo, settings);
-						else return Tween.Alpha(step.cachedCanvasGroup, new TweenSettings<float>(step.fadeFrom, step.fadeTo, settings));
+						if (step.animateFromCurrent) {
+							return Tween.Alpha(step.cachedCanvasGroup, step.fadeTo, settings);
+						} else {
+							return Tween.Alpha(step.cachedCanvasGroup, new TweenSettings<float>(step.fadeFrom, step.fadeTo, settings));
+						}
 					}
 					break;
 				case AnimType.Scale:
 					if (step.relativeOffset) {
 						if (step.isUI) {
-							Vector3 start = default; bool init = false;
-							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (t, v) => {
-								if (!init) { start = t.localScale; init = true; }
-								if (step.animateFromCurrent) t.localScale = Vector3.LerpUnclamped(start, start + step.scaleTo, v);
-								else t.localScale = Vector3.LerpUnclamped(start + step.scaleFrom, start + step.scaleTo, v);
+							Vector3 start = default;
+							bool init = false;
+							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
+								if (!init) {
+									start = obj.localScale;
+									init = true;
+								}
+								if (step.animateFromCurrent) {
+									obj.localScale = Vector3.LerpUnclamped(start, start + step.scaleTo, v);
+								} else {
+									obj.localScale = Vector3.LerpUnclamped(start + step.scaleFrom, start + step.scaleTo, v);
+								}
 							});
 						} else {
-							Vector3 start = default; bool init = false;
-							return Tween.Custom(target, new TweenSettings<float>(0f, 1f, settings), (t, v) => {
-								if (!init) { start = t.localScale; init = true; }
-								if (step.animateFromCurrent) t.localScale = Vector3.LerpUnclamped(start, start + step.scaleTo3D, v);
-								else t.localScale = Vector3.LerpUnclamped(start + step.scaleFrom3D, start + step.scaleTo3D, v);
+							Vector3 start = default;
+							bool init = false;
+							return Tween.Custom(t, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
+								if (!init) {
+									start = obj.localScale;
+									init = true;
+								}
+								if (step.animateFromCurrent) {
+									obj.localScale = Vector3.LerpUnclamped(start, start + step.scaleTo3D, v);
+								} else {
+									obj.localScale = Vector3.LerpUnclamped(start + step.scaleFrom3D, start + step.scaleTo3D, v);
+								}
 							});
 						}
 					} else {
 						if (step.isUI) {
-							if (step.animateFromCurrent) return Tween.Scale(step.rectTarget, step.scaleTo, settings);
-							else return Tween.Scale(step.rectTarget, new TweenSettings<Vector3>(step.scaleFrom, step.scaleTo, settings));
+							if (step.animateFromCurrent) {
+								return Tween.Scale(step.rectTarget, step.scaleTo, settings);
+							} else {
+								return Tween.Scale(step.rectTarget, new TweenSettings<Vector3>(step.scaleFrom, step.scaleTo, settings));
+							}
 						} else {
-							if (step.animateFromCurrent) return Tween.Scale(target, step.scaleTo3D, settings);
-							else return Tween.Scale(target, new TweenSettings<Vector3>(step.scaleFrom3D, step.scaleTo3D, settings));
+							if (step.animateFromCurrent) {
+								return Tween.Scale(t, step.scaleTo3D, settings);
+							} else {
+								return Tween.Scale(t, new TweenSettings<Vector3>(step.scaleFrom3D, step.scaleTo3D, settings));
+							}
 						}
 					}
 				case AnimType.Slide:
 					if (step.relativeOffset) {
 						if (step.isUI) {
-							Vector2 start = default; bool init = false;
-							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (t, v) => {
-								if (!init) { start = t.anchoredPosition; init = true; }
-								if (step.animateFromCurrent) t.anchoredPosition = Vector2.LerpUnclamped(start, start + step.slideTo, v);
-								else t.anchoredPosition = Vector2.LerpUnclamped(start + step.slideFrom, start + step.slideTo, v);
+							Vector2 start = default;
+							bool init = false;
+							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
+								if (!init) {
+									start = obj.anchoredPosition;
+									init = true;
+								}
+								if (step.animateFromCurrent) {
+									obj.anchoredPosition = Vector2.LerpUnclamped(start, start + step.slideTo, v);
+								} else {
+									obj.anchoredPosition = Vector2.LerpUnclamped(start + step.slideFrom, start + step.slideTo, v);
+								}
 							});
 						} else {
-							Vector3 start = default; bool init = false;
-							return Tween.Custom(target, new TweenSettings<float>(0f, 1f, settings), (t, v) => {
-								if (!init) { start = t.localPosition; init = true; }
-								if (step.animateFromCurrent) t.localPosition = Vector3.LerpUnclamped(start, start + (Vector3)step.slideTo, v);
-								else t.localPosition = Vector3.LerpUnclamped(start + (Vector3)step.slideFrom, start + (Vector3)step.slideTo, v);
+							Vector3 start = default;
+							bool init = false;
+							return Tween.Custom(t, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
+								if (!init) {
+									start = obj.localPosition;
+									init = true;
+								}
+								if (step.animateFromCurrent) {
+									obj.localPosition = Vector3.LerpUnclamped(start, start + (Vector3)step.slideTo, v);
+								} else {
+									obj.localPosition = Vector3.LerpUnclamped(start + (Vector3)step.slideFrom, start + (Vector3)step.slideTo, v);
+								}
 							});
 						}
 					} else {
 						if (step.isUI) {
-							if (step.animateFromCurrent) return Tween.UIAnchoredPosition(step.rectTarget, step.slideTo, settings);
-							else return Tween.UIAnchoredPosition(step.rectTarget, new TweenSettings<Vector2>(step.slideFrom, step.slideTo, settings));
+							if (step.animateFromCurrent) {
+								return Tween.UIAnchoredPosition(step.rectTarget, step.slideTo, settings);
+							} else {
+								return Tween.UIAnchoredPosition(step.rectTarget, new TweenSettings<Vector2>(step.slideFrom, step.slideTo, settings));
+							}
 						} else {
-							if (step.animateFromCurrent) return Tween.LocalPosition(target, (Vector3)step.slideTo, settings);
-							else return Tween.LocalPosition(target, new TweenSettings<Vector3>((Vector3)step.slideFrom, (Vector3)step.slideTo, settings));
+							if (step.animateFromCurrent) {
+								return Tween.LocalPosition(t, (Vector3)step.slideTo, settings);
+							} else {
+								return Tween.LocalPosition(t, new TweenSettings<Vector3>((Vector3)step.slideFrom, (Vector3)step.slideTo, settings));
+							}
 						}
 					}
 				case AnimType.Rotate:
 					if (step.relativeOffset) {
-						Vector3 start = default; bool init = false;
-						return Tween.Custom(target, new TweenSettings<float>(0f, 1f, settings), (t, v) => {
-							if (!init) { start = t.localEulerAngles; init = true; }
-							if (step.animateFromCurrent) t.localEulerAngles = Vector3.LerpUnclamped(start, start + new Vector3(0, 0, step.rotateTo), v);
-							else t.localEulerAngles = Vector3.LerpUnclamped(start + new Vector3(0, 0, step.rotateFrom), start + new Vector3(0, 0, step.rotateTo), v);
+						Vector3 start = default;
+						bool init = false;
+						return Tween.Custom(t, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
+							if (!init) {
+								start = obj.localEulerAngles;
+								init = true;
+							}
+							if (step.animateFromCurrent) {
+								obj.localEulerAngles = Vector3.LerpUnclamped(start, start + new Vector3(0, 0, step.rotateTo), v);
+							} else {
+								obj.localEulerAngles = Vector3.LerpUnclamped(start + new Vector3(0, 0, step.rotateFrom), start + new Vector3(0, 0, step.rotateTo), v);
+							}
 						});
 					} else {
 						var toVec = new Vector3(step.initialLocalRotation.x, step.initialLocalRotation.y, step.rotateTo);
-						if (step.animateFromCurrent) return Tween.LocalRotation(target, toVec, settings);
-						else return Tween.LocalRotation(target, new TweenSettings<Vector3>(new Vector3(step.initialLocalRotation.x, step.initialLocalRotation.y, step.rotateFrom), toVec, settings));
+						if (step.animateFromCurrent) {
+							return Tween.LocalRotation(t, toVec, settings);
+						} else {
+							return Tween.LocalRotation(t, new TweenSettings<Vector3>(new Vector3(step.initialLocalRotation.x, step.initialLocalRotation.y, step.rotateFrom), toVec, settings));
+						}
 					}
 				case AnimType.SizeDelta:
 					if (step.isUI) {
 						if (step.relativeOffset) {
-							Vector2 start = default; bool init = false;
-							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (t, v) => {
-								if (!init) { start = t.sizeDelta; init = true; }
-								if (step.animateFromCurrent) t.sizeDelta = Vector2.LerpUnclamped(start, start + step.sizeDeltaTo, v);
-								else t.sizeDelta = Vector2.LerpUnclamped(start + step.sizeDeltaFrom, start + step.sizeDeltaTo, v);
+							Vector2 start = default;
+							bool init = false;
+							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
+								if (!init) {
+									start = obj.sizeDelta;
+									init = true;
+								}
+								if (step.animateFromCurrent) {
+									obj.sizeDelta = Vector2.LerpUnclamped(start, start + step.sizeDeltaTo, v);
+								} else {
+									obj.sizeDelta = Vector2.LerpUnclamped(start + step.sizeDeltaFrom, start + step.sizeDeltaTo, v);
+								}
 							});
 						} else {
-							if (step.animateFromCurrent) return Tween.UISizeDelta(step.rectTarget, step.sizeDeltaTo, settings);
-							else return Tween.UISizeDelta(step.rectTarget, new TweenSettings<Vector2>(step.sizeDeltaFrom, step.sizeDeltaTo, settings));
+							if (step.animateFromCurrent) {
+								return Tween.UISizeDelta(step.rectTarget, step.sizeDeltaTo, settings);
+							} else {
+								return Tween.UISizeDelta(step.rectTarget, new TweenSettings<Vector2>(step.sizeDeltaFrom, step.sizeDeltaTo, settings));
+							}
 						}
 					}
 					break;
 				case AnimType.FillAmount:
 					if (step.cachedImage != null) {
-						if (step.animateFromCurrent) return Tween.UIFillAmount(step.cachedImage, step.fillAmountTo, settings);
-						else return Tween.UIFillAmount(step.cachedImage, new TweenSettings<float>(step.fillAmountFrom, step.fillAmountTo, settings));
+						if (step.animateFromCurrent) {
+							return Tween.UIFillAmount(step.cachedImage, step.fillAmountTo, settings);
+						} else {
+							return Tween.UIFillAmount(step.cachedImage, new TweenSettings<float>(step.fillAmountFrom, step.fillAmountTo, settings));
+						}
 					}
 					break;
 				case AnimType.Bounce:
-					if (step.isUI) return Tween.PunchLocalPosition(step.rectTarget, new ShakeSettings(new Vector3(0f, step.bounceIntensity, 0f), Mathf.Max(step.duration, 0.001f), step.bounceCount, enableFalloff: true, startDelay: step.delay + absoluteDelay));
-					else return Tween.PunchLocalPosition(target, new ShakeSettings(step.bounce3D, Mathf.Max(step.duration, 0.001f), step.bounceCount, enableFalloff: true, startDelay: step.delay + absoluteDelay));
+					if (step.isUI) {
+						return Tween.PunchLocalPosition(step.rectTarget, new ShakeSettings(new Vector3(0f, step.bounceIntensity, 0f), Mathf.Max(step.duration, 0.001f), step.bounceCount, enableFalloff: true, startDelay: step.delay + absoluteDelay));
+					} else {
+						return Tween.PunchLocalPosition(t, new ShakeSettings(step.bounce3D, Mathf.Max(step.duration, 0.001f), step.bounceCount, enableFalloff: true, startDelay: step.delay + absoluteDelay));
+					}
 				case AnimType.PunchRotate:
 					if (step.isUI) {
 						float angle = step.punchRotateRandom ? (Random.value > 0.5f ? step.punchRotateAngle1 : step.punchRotateAngle2) : step.punchRotateAngle;
 						return Tween.PunchLocalRotation(step.rectTarget, new ShakeSettings(new Vector3(0f, 0f, angle), Mathf.Max(step.duration, 0.001f), step.punchRotateFrequency, enableFalloff: true, startDelay: step.delay + absoluteDelay));
-					} else return Tween.PunchLocalRotation(target, new ShakeSettings(step.punchRotate3D, Mathf.Max(step.duration, 0.001f), step.punchRotateFrequency, enableFalloff: true, startDelay: step.delay + absoluteDelay));
+					} else {
+						return Tween.PunchLocalRotation(t, new ShakeSettings(step.punchRotate3D, Mathf.Max(step.duration, 0.001f), step.punchRotateFrequency, enableFalloff: true, startDelay: step.delay + absoluteDelay));
+					}
 				case AnimType.PunchScale:
-					if (step.isUI) return Tween.PunchScale(step.rectTarget, new ShakeSettings(Vector3.one * step.punchScaleIntensity, Mathf.Max(step.duration, 0.001f), step.punchScaleFrequency, enableFalloff: true, startDelay: step.delay + absoluteDelay));
-					else return Tween.PunchScale(target, new ShakeSettings(step.punchScale3D, Mathf.Max(step.duration, 0.001f), step.punchScaleFrequency, enableFalloff: true, startDelay: step.delay + absoluteDelay));
+					Vector3 pStrength = step.punchScaleUseVector3 ? step.punchScale3D : Vector3.one * step.punchScaleIntensity;
+					if (step.isUI) {
+						return Tween.PunchScale(step.rectTarget, new ShakeSettings(pStrength, Mathf.Max(step.duration, 0.001f), step.punchScaleFrequency, enableFalloff: true, startDelay: step.delay + absoluteDelay));
+					} else {
+						return Tween.PunchScale(t, new ShakeSettings(pStrength, Mathf.Max(step.duration, 0.001f), step.punchScaleFrequency, enableFalloff: true, startDelay: step.delay + absoluteDelay));
+					}
 				case AnimType.ShakePosition:
-					return Tween.ShakeLocalPosition(target, new ShakeSettings(step.shakeStrength, Mathf.Max(step.duration, 0.001f), step.shakeFrequency, enableFalloff: step.shakeFalloff, startDelay: step.delay + absoluteDelay));
+					return Tween.ShakeLocalPosition(t, new ShakeSettings(step.shakeStrength, Mathf.Max(step.duration, 0.001f), step.shakeFrequency, enableFalloff: step.shakeFalloff, startDelay: step.delay + absoluteDelay));
 				case AnimType.ShakeRotation:
-					return Tween.ShakeLocalRotation(target, new ShakeSettings(step.shakeStrength, Mathf.Max(step.duration, 0.001f), step.shakeFrequency, enableFalloff: step.shakeFalloff, startDelay: step.delay + absoluteDelay));
+					return Tween.ShakeLocalRotation(t, new ShakeSettings(step.shakeStrength, Mathf.Max(step.duration, 0.001f), step.shakeFrequency, enableFalloff: step.shakeFalloff, startDelay: step.delay + absoluteDelay));
 				case AnimType.ColorTint:
 					if (step.cachedGraphic != null) {
-						if (step.animateFromCurrent) return Tween.Color(step.cachedGraphic, step.colorTo, settings);
-						else return Tween.Color(step.cachedGraphic, new TweenSettings<Color>(step.colorFrom, step.colorTo, settings));
+						if (step.animateFromCurrent) {
+							return Tween.Color(step.cachedGraphic, step.colorTo, settings);
+						} else {
+							return Tween.Color(step.cachedGraphic, new TweenSettings<Color>(step.colorFrom, step.colorTo, settings));
+						}
 					}
 					break;
 				case AnimType.FadeSpriteColor:
@@ -698,56 +997,81 @@ namespace Sperlich.Sequencer {
 				case AnimType.TypeWriter:
 					if (step.cachedText != null) {
 						string targetText = string.IsNullOrEmpty(step.setTextValue) ? step.cachedText.text : step.setTextValue;
-						float estimatedDur = Mathf.Max((targetText ?? "").Length, 1f) / Mathf.Max(step.typeWriterCharsPerSecond, 1f);
-						bool isInit = false; int cachedCharCount = 0;
-						return Tween.Custom(step.cachedText, new TweenSettings<float>(0f, 1f, MakeSettings(step, absoluteDelay, estimatedDur)), (t, v) => {
-							if (!isInit || v == 0f) {
-								if (!string.IsNullOrEmpty(step.setTextValue)) t.SetText(step.setTextValue);
-								t.maxVisibleCharacters = 0; t.ForceMeshUpdate(true);
-								cachedCharCount = t.textInfo.characterCount; isInit = true;
+
+						if (!step.animateFromCurrent) {
+							if (!string.IsNullOrEmpty(step.setTextValue)) {
+								step.cachedText.SetText(step.setTextValue);
 							}
-							t.maxVisibleCharacters = Mathf.RoundToInt(Mathf.Lerp(0, cachedCharCount, v));
+							step.cachedText.maxVisibleCharacters = 0;
+							step.cachedText.ForceMeshUpdate(true);
+						}
+
+						float estimatedDur = Mathf.Max((targetText ?? "").Length, 1f) / Mathf.Max(step.typeWriterCharsPerSecond, 1f);
+						bool isInit = false;
+						int cachedCharCount = 0;
+						return Tween.Custom(step.cachedText, new TweenSettings<float>(0f, 1f, MakeSettings(step, absoluteDelay, estimatedDur)), (obj, v) => {
+							if (!isInit || v == 0f) {
+								if (!string.IsNullOrEmpty(step.setTextValue)) {
+									obj.SetText(step.setTextValue);
+								}
+								obj.maxVisibleCharacters = 0;
+								obj.ForceMeshUpdate(true);
+								cachedCharCount = obj.textInfo.characterCount;
+								isInit = true;
+							}
+							obj.maxVisibleCharacters = Mathf.RoundToInt(Mathf.Lerp(0, cachedCharCount, v));
 						});
 					}
 					break;
 				case AnimType.TextCounter:
 					if (step.cachedText != null) {
 						float fromNum = step.animateFromCurrent ? step.textCounterCurrentValue : step.textCounterFrom;
-						return Tween.Custom(step.cachedText, new TweenSettings<float>(fromNum, step.textCounterTo, settings), (t, v) => {
+
+						if (!step.animateFromCurrent) {
+							step.textCounterCurrentValue = fromNum;
+							step.cachedText.text = string.Format(step.textCounterFormat, step.textCounterRoundToInt ? Mathf.RoundToInt(fromNum) : fromNum);
+						}
+
+						return Tween.Custom(step.cachedText, new TweenSettings<float>(fromNum, step.textCounterTo, settings), (obj, v) => {
 							step.textCounterCurrentValue = v;
-							t.text = string.Format(step.textCounterFormat, step.textCounterRoundToInt ? Mathf.RoundToInt(v) : v);
+							obj.text = string.Format(step.textCounterFormat, step.textCounterRoundToInt ? Mathf.RoundToInt(v) : v);
 						});
 					}
 					break;
 				case AnimType.FadeAudio:
 					if (step.cachedAudioSource != null) {
-						if (step.animateFromCurrent) return Tween.AudioVolume(step.cachedAudioSource, step.fadeAudioTo, settings);
-						else return Tween.AudioVolume(step.cachedAudioSource, new TweenSettings<float>(step.fadeAudioFrom, step.fadeAudioTo, settings));
+						if (step.animateFromCurrent) {
+							return Tween.AudioVolume(step.cachedAudioSource, step.fadeAudioTo, settings);
+						} else {
+							return Tween.AudioVolume(step.cachedAudioSource, new TweenSettings<float>(step.fadeAudioFrom, step.fadeAudioTo, settings));
+						}
 					}
 					break;
 				case AnimType.TimeScale:
 					float startTS = step.animateFromCurrent ? Time.timeScale : step.timeScaleFrom;
-					return Tween.Custom(this, new TweenSettings<float>(startTS, step.timeScaleTo, unscaledSettings), (t, v) => Time.timeScale = v);
-				case AnimType.MaterialFloat:
-					if (step.cachedRenderer != null) {
-						if (step.animateFromCurrent) {
-							return Tween.MaterialProperty(step.cachedRenderer.material, step.cachedMaterialPropertyId, step.materialFloatTo, settings);
-						} else {
-							return Tween.MaterialProperty(step.cachedRenderer.material, step.cachedMaterialPropertyId, new TweenSettings<float>(step.materialFloatFrom, step.materialFloatTo, settings));
-						}
-					}
-					break;
-				case AnimType.MaterialColor:
-					if (step.cachedRenderer != null) {
-						if (step.animateFromCurrent) {
-							return Tween.MaterialProperty(step.cachedRenderer.material, step.cachedMaterialPropertyId, step.materialColorTo, settings);
-						} else {
-							return Tween.MaterialProperty(step.cachedRenderer.material, step.cachedMaterialPropertyId, new TweenSettings<Vector4>(step.materialColorFrom, step.materialColorTo, settings));
+					return Tween.Custom(this, new TweenSettings<float>(startTS, step.timeScaleTo, unscaledSettings), (obj, v) => {
+						Time.timeScale = v;
+					});
+				case AnimType.MaterialProperty:
+					if (step.cachedMaterial != null) {
+						if (step.materialPropertyType == MaterialPropertyType.Float) {
+							if (step.animateFromCurrent) {
+								return Tween.MaterialProperty(step.cachedMaterial, step.cachedMaterialPropertyId, step.materialFloatTo, settings);
+							} else {
+								return Tween.MaterialProperty(step.cachedMaterial, step.cachedMaterialPropertyId, new TweenSettings<float>(step.materialFloatFrom, step.materialFloatTo, settings));
+							}
+						} else if (step.materialPropertyType == MaterialPropertyType.Color) {
+							if (step.animateFromCurrent) {
+								return Tween.MaterialProperty(step.cachedMaterial, step.cachedMaterialPropertyId, step.materialColorTo, settings);
+							} else {
+								return Tween.MaterialProperty(step.cachedMaterial, step.cachedMaterialPropertyId, new TweenSettings<Vector4>(step.materialColorFrom, step.materialColorTo, settings));
+							}
 						}
 					}
 					break;
 			}
-			return Tween.Delay(Mathf.Max(step.duration + step.delay + absoluteDelay, 0.001f));
+
+			return Tween.Delay(Mathf.Max(step.duration + step.delay + absoluteDelay, 0f));
 		}
 
 		static TweenSettings MakeSettings(AnimStep step, float absoluteDelay, float overrideDuration = -1f, bool unscaledTime = false) {
@@ -776,6 +1100,7 @@ namespace Sperlich.Sequencer {
 
 		[System.Serializable]
 		public class AnimSequence {
+
 			[System.NonSerialized] public AnimSequencer owner;
 			public string label;
 			public TriggerType trigger;
@@ -788,7 +1113,9 @@ namespace Sperlich.Sequencer {
 			[System.NonSerialized] public System.Action onStartAction;
 			[System.NonSerialized] public System.Action onCompleteAction;
 			[System.NonSerialized] public bool isPlaying;
+			[System.NonSerialized] public bool isPaused;
 			[System.NonSerialized] public bool isTemporary;
+			[System.NonSerialized] public List<Sequence> activeTweens = new List<Sequence>();
 
 #if UNITY_EDITOR
 			public bool isExpanded = true;
@@ -839,6 +1166,7 @@ namespace Sperlich.Sequencer {
 			public float textCounterTo = 100f;
 			public string textCounterFormat = "{0}";
 			public bool textCounterRoundToInt = true;
+			public bool punchScaleUseVector3 = false;
 			[HideInInspector] public float textCounterCurrentValue = 0f;
 			public Color colorFrom = Color.white;
 			public Color colorTo = Color.white;
@@ -893,6 +1221,22 @@ namespace Sperlich.Sequencer {
 			public Color materialColorFrom = Color.white;
 			public Color materialColorTo = Color.white;
 
+			public SetPropertyType setPropertyType = SetPropertyType.Active;
+			public MaterialPropertyType materialPropertyType = MaterialPropertyType.Float;
+			public Vector2 setSizeDeltaValue = Vector2.zero;
+			public Vector2 setPivotValue = new Vector2(0.5f, 0.5f);
+
+			public Material materialTarget;
+			public Graphic graphicTarget;
+			public int materialIndex = 0;
+
+			public SequenceControlType sequenceControlType = SequenceControlType.Stop;
+			public SequenceControlTarget sequenceControlTarget = SequenceControlTarget.Specific;
+			public AnimSequencer controlSequencerTarget;
+			public string controlSequenceLabel = "";
+
+			[System.NonSerialized] public Material cachedMaterial;
+			[System.NonSerialized] public Vector2 initialPivot;
 			[System.NonSerialized] public System.Func<bool> waitConditionLambda;
 			[System.NonSerialized] public Vector3 initialLocalPosition;
 			[System.NonSerialized] public Vector3 initialLocalRotation;
