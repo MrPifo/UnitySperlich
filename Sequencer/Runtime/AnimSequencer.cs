@@ -29,11 +29,9 @@ namespace Sperlich.Sequencer {
 				seq.owner = this;
 			}
 		}
-
 		void OnEnable() {
 			Play(TriggerType.OnEnable);
 		}
-
 		void OnDisable() {
 			if (_isPlayingDisableSequence || _internalDisable) {
 				return;
@@ -59,7 +57,6 @@ namespace Sperlich.Sequencer {
 			_isPlayingDisableSequence = true;
 			PlayDisableSequences();
 		}
-
 		void OnDestroy() {
 			foreach (var kvp in _activeSequences) {
 				foreach (var s in kvp.Value.ToList()) {
@@ -72,7 +69,6 @@ namespace Sperlich.Sequencer {
 			_activeSequences.Clear();
 			_pollingWaits.Clear();
 		}
-
 		void Update() {
 			for (int i = _pollingWaits.Count - 1; i >= 0; i--) {
 				var state = _pollingWaits[i];
@@ -157,7 +153,6 @@ namespace Sperlich.Sequencer {
 				}
 			}
 		}
-
 		public void PlayByLabel(string sequenceLabel) {
 			if (!gameObject.activeInHierarchy) {
 				Debug.LogWarning($"[AnimSequencer] Cannot play sequence '{sequenceLabel}' because the GameObject '{gameObject.name}' is disabled. Please enable it first.");
@@ -308,7 +303,6 @@ namespace Sperlich.Sequencer {
 
 			PlaySequenceSlice(seq, seqIndex, 0, isDisable);
 		}
-
 		void PlaySequenceSlice(AnimSequence seq, int seqIndex, int startIndex, bool isDisable) {
 			if (startIndex >= seq.steps.Count) {
 				FinishSequence(seq, seqIndex, isDisable);
@@ -440,7 +434,6 @@ namespace Sperlich.Sequencer {
 				}
 			});
 		}
-
 		void HandleSliceBreak(AnimType bType, AnimStep step, AnimSequence seq, int seqIndex, int breakIndex, string rAnchor, bool isDisable) {
 			if (bType == AnimType.WaitUntil || (bType == AnimType.Wait && step.waitMethod == WaitMethod.Frames)) {
 				_pollingWaits.Add(new WaitState {
@@ -456,7 +449,6 @@ namespace Sperlich.Sequencer {
 				PlaySequenceSlice(seq, seqIndex, anchorIdx >= 0 ? anchorIdx : breakIndex + 1, isDisable);
 			}
 		}
-
 		void FinishSequence(AnimSequence seq, int seqIndex, bool isDisable) {
 			if (!seq.isPlaying) {
 				return;
@@ -490,14 +482,12 @@ namespace Sperlich.Sequencer {
 				sequences.Remove(seq);
 			}
 		}
-
 		int FindAnchorIndex(AnimSequence seq, string label) {
 			for (int i = 0; i < seq.steps.Count; i++) {
 				if (seq.steps[i].type == AnimType.Anchor && seq.steps[i].anchorLabel == label) return i;
 			}
 			return -1;
 		}
-
 		void InitStepCache(AnimStep step) {
 			if (step.type == AnimType.Trigger || step.type == AnimType.Event || step.type == AnimType.PlayAudio ||
 				step.type == AnimType.SetProperty || step.type == AnimType.SetMaterialProperty || step.type == AnimType.ControlSequence) {
@@ -618,7 +608,6 @@ namespace Sperlich.Sequencer {
 				   t == AnimType.SetMaterialProperty ||
 				   t == AnimType.ControlSequence;
 		}
-
 		static bool IsLogicType(AnimType type) {
 			return type == AnimType.Anchor || type == AnimType.Repeat || type == AnimType.WaitUntil;
 		}
