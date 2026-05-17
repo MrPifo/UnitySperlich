@@ -8,19 +8,26 @@ namespace Sperlich.Sequencer {
 
 		#region Global Runner (Autonomous Sequences)
 		private static AnimSequencer _globalRunner;
-
 		public static AnimSequencer Global {
 			get {
 				if (_globalRunner == null) {
-					var go = new GameObject("[AnimSequencer_GlobalRunner]");
-					GameObject.DontDestroyOnLoad(go);
-					go.hideFlags = HideFlags.HideInHierarchy;
-					_globalRunner = go.AddComponent<AnimSequencer>();
+					var existing = GameObject.Find("[AnimSequencer_GlobalRunner]");
+
+					if (existing != null) {
+						_globalRunner = existing.GetComponent<AnimSequencer>();
+					}
+
+					if (_globalRunner == null) {
+						var go = new GameObject("[AnimSequencer_GlobalRunner]");
+						GameObject.DontDestroyOnLoad(go);
+						go.hideFlags = HideFlags.HideInHierarchy;
+						_globalRunner = go.AddComponent<AnimSequencer>();
+					}
 				}
+
 				return _globalRunner;
 			}
 		}
-
 		public static AnimSequence Create(string label = "") {
 			var seq = Global.CreateSequence(label, TriggerType.Manual);
 			seq.isTemporary = true;
@@ -38,7 +45,6 @@ namespace Sperlich.Sequencer {
 			sequences.Add(seq);
 			return seq;
 		}
-
 		public AnimSequence GetSequence(string label) {
 			return sequences.Find(s => s.label == label);
 		}
@@ -46,7 +52,6 @@ namespace Sperlich.Sequencer {
 		public bool RemoveSequence(string label) {
 			return sequences.RemoveAll(s => s.label == label) > 0;
 		}
-
 		public void ClearSequences() {
 			sequences.Clear();
 		}
@@ -65,7 +70,6 @@ namespace Sperlich.Sequencer {
 			seq.steps.Add(step);
 			return step;
 		}
-
 		public AnimStep InsertStep<T>(string sequenceLabel, int index, T config) where T : AnimConfig {
 			var seq = GetSequence(sequenceLabel);
 			if (seq == null) {
@@ -86,7 +90,6 @@ namespace Sperlich.Sequencer {
 
 			return step;
 		}
-
 		public bool RemoveStep(string sequenceLabel, string stepTag) {
 			var seq = GetSequence(sequenceLabel);
 			if (seq != null) {
@@ -98,18 +101,29 @@ namespace Sperlich.Sequencer {
 		public string CopyToJson() {
 			return JsonUtility.ToJson(new SequenceWrapper { sequences = this.sequences }, true);
 		}
-
 		public void PasteFromJson(string json) {
 			try {
 				var w = JsonUtility.FromJson<SequenceWrapper>(json);
+
 				if (w != null && w.sequences != null) {
 					this.sequences = w.sequences;
+
+					foreach (var seq in this.sequences) {
+						seq.owner = this;
+					}
 				}
 			} catch (System.Exception e) {
 				Debug.LogError($"[AnimSequencer] PasteFromJson failed: {e.Message}");
 			}
 		}
 		#endregion
+
+#if UNITY_EDITOR
+		[UnityEditor.InitializeOnLoadMethod]
+		static void OnDomainReload() {
+			_globalRunner = null;
+		}
+#endif
 	}
 
 	#region Base Configurations

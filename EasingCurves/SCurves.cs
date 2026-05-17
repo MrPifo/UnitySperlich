@@ -13,7 +13,7 @@ namespace Sperlich.Easing {
 		private static Dictionary<EaseType, CurvePreset> Curves { get; set; }
 		public const string CurvesFolder = "Curves";
 		private const string CurvePresetLibraryName = "CurvePresetLibrary";
-		private const string CurvePresetSaveFolder = "Assets/Sperlich/EasingCurves/Resources/Curves";
+		private const string CurvePresetSaveFolder = "Assets/UnitySperlich/EasingCurves/Resources/Curves";
 
 		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSplashScreen)]
 		public static void Initialize() {

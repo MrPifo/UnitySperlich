@@ -43,43 +43,83 @@ namespace Sperlich.Sequencer {
 
 		#region Playback & Lifecycle
 		public static void Play(this AnimSequencer.AnimSequence seq) {
-			if (seq != null) {
-				if (seq.owner != null) {
-					seq.owner.PlaySequence(seq);
-				} else {
-					Debug.LogError($"[AnimSequencer] Cannot play. Sequence '{seq.label}' has no valid owner.");
-				}
-			} else {
+			if (seq == null) {
 				Debug.LogError("[AnimSequencer] Cannot play. Sequence is null.");
+				return;
 			}
+
+			if (seq.owner == null) {
+				Debug.LogError($"[AnimSequencer] Cannot play. Sequence '{seq.label}' has no valid owner.");
+				return;
+			}
+
+			seq.owner.PlaySequence(seq);
+		}
+		public static void Stop(this AnimSequencer.AnimSequence seq) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot stop. Sequence is null.");
+				return;
+			}
+
+			if (seq.owner == null) {
+				Debug.LogError($"[AnimSequencer] Cannot stop. Sequence '{seq.label}' has no valid owner.");
+				return;
+			}
+
+			seq.owner.StopByLabel(seq.label);
+		}
+		public static void Complete(this AnimSequencer.AnimSequence seq) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot complete. Sequence is null.");
+				return;
+			}
+
+			if (seq.owner == null) {
+				Debug.LogError($"[AnimSequencer] Cannot complete. Sequence '{seq.label}' has no valid owner.");
+				return;
+			}
+
+			seq.owner.CompleteByLabel(seq.label);
 		}
 		public static void Pause(this AnimSequencer.AnimSequence seq) {
-			if (seq != null) {
-				if (seq.owner != null) {
-					seq.owner.Pause(seq.label);
-				} else {
-					Debug.LogError($"[AnimSequencer] Cannot pause. Sequence '{seq.label}' has no valid owner.");
-				}
-			} else {
+			if (seq == null) {
 				Debug.LogError("[AnimSequencer] Cannot pause. Sequence is null.");
+				return;
 			}
+
+			if (seq.owner == null) {
+				Debug.LogError($"[AnimSequencer] Cannot pause. Sequence '{seq.label}' has no valid owner.");
+				return;
+			}
+
+			seq.owner.Pause(seq.label);
 		}
 		public static void Resume(this AnimSequencer.AnimSequence seq) {
-			if (seq != null) {
-				if (seq.owner != null) {
-					seq.owner.Resume(seq.label);
-				} else {
-					Debug.LogError($"[AnimSequencer] Cannot resume. Sequence '{seq.label}' has no valid owner.");
-				}
-			} else {
+			if (seq == null) {
 				Debug.LogError("[AnimSequencer] Cannot resume. Sequence is null.");
+				return;
 			}
+
+			if (seq.owner == null) {
+				Debug.LogError($"[AnimSequencer] Cannot resume. Sequence '{seq.label}' has no valid owner.");
+				return;
+			}
+
+			seq.owner.Resume(seq.label);
+		}
+		
+		public static bool IsPlaying(this AnimSequencer.AnimSequence seq) {
+			return seq != null && seq.IsPlaying;
+		}
+		public static bool IsPaused(this AnimSequencer.AnimSequence seq) {
+			return seq != null && seq.IsPaused;
 		}
 		public static AnimSequencer.AnimSequence OnComplete(this AnimSequencer.AnimSequence seq, System.Action action) {
 			if (seq == null) {
 				Debug.LogError("[AnimSequencer] Cannot set OnComplete. Sequence is null.");
 				return null;
 			}
+
 			seq.onCompleteAction += action;
 			return seq;
 		}
@@ -88,15 +128,45 @@ namespace Sperlich.Sequencer {
 				Debug.LogError("[AnimSequencer] Cannot set OnStart. Sequence is null.");
 				return null;
 			}
+
 			seq.onStartAction += action;
 			return seq;
+		}
+		
+		public static AnimSequencer.AnimSequence ClearOnComplete(this AnimSequencer.AnimSequence seq) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot clear OnComplete. Sequence is null.");
+				return null;
+			}
+
+			seq.onCompleteAction = null;
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence ClearOnStart(this AnimSequencer.AnimSequence seq) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot clear OnStart. Sequence is null.");
+				return null;
+			}
+
+			seq.onStartAction = null;
+			return seq;
+		}
+		
+		public static CustomYieldInstruction WaitForCompletion(this AnimSequencer.AnimSequence seq) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot WaitForCompletion. Sequence is null.");
+				return null;
+			}
+
+			return new WaitWhile(() => seq.IsPlaying);
 		}
 		public static async Task PlayAsync(this AnimSequencer.AnimSequence seq) {
 			if (seq == null) {
 				Debug.LogError("[AnimSequencer] Cannot PlayAsync. Sequence is null.");
 				return;
 			}
-			var tcs = new TaskCompletionSource<bool>();
+
+			var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
 			System.Action completeAction = null;
 			completeAction = () => {
 				seq.onCompleteAction -= completeAction;
@@ -104,21 +174,23 @@ namespace Sperlich.Sequencer {
 			};
 			seq.onCompleteAction += completeAction;
 			seq.Play();
-			await tcs.Task;
-		}
-		public static CustomYieldInstruction WaitForCompletion(this AnimSequencer.AnimSequence seq) {
-			if (seq == null) {
-				Debug.LogError("[AnimSequencer] Cannot WaitForCompletion. Sequence is null.");
-				return null;
+
+			// Falls Play() synchron fehlschlug oder Sequenz leer war, nie blockieren
+			if (!seq.IsPlaying) {
+				seq.onCompleteAction -= completeAction;
+				return;
 			}
-			return new WaitWhile(() => seq.isPlaying);
+
+			await tcs.Task;
 		}
 		public static async Task PlayAsync(this AnimSequencer sequencer, string sequenceLabel) {
 			if (sequencer == null) {
 				Debug.LogError("[AnimSequencer] Cannot PlayAsync. Sequencer is null.");
 				return;
 			}
+
 			var seq = sequencer.GetSequence(sequenceLabel);
+
 			if (seq != null) {
 				await seq.PlayAsync();
 			} else {
@@ -130,13 +202,45 @@ namespace Sperlich.Sequencer {
 				Debug.LogError("[AnimSequencer] Cannot WaitForCompletion. Sequencer is null.");
 				return null;
 			}
+
 			var seq = sequencer.GetSequence(sequenceLabel);
+
 			if (seq != null) {
 				return seq.WaitForCompletion();
-			} else {
-				Debug.LogError($"[AnimSequencer] Cannot WaitForCompletion. Sequence '{sequenceLabel}' not found.");
 			}
+
+			Debug.LogError($"[AnimSequencer] Cannot WaitForCompletion. Sequence '{sequenceLabel}' not found.");
 			return null;
+		}
+		
+		public static void PlayDelayed(this AnimSequencer.AnimSequence seq, float delay) {
+			if (seq == null) {
+				Debug.LogError("[AnimSequencer] Cannot PlayDelayed. Sequence is null.");
+				return;
+			}
+
+			if (seq.owner == null) {
+				Debug.LogError($"[AnimSequencer] Cannot PlayDelayed. Sequence '{seq.label}' has no valid owner.");
+				return;
+			}
+
+			PrimeTween.Tween.Delay(delay).OnComplete(() => {
+				if (seq != null && seq.owner != null) {
+					seq.owner.PlaySequence(seq);
+				}
+			});
+		}
+		public static void PlayDelayed(this AnimSequencer sequencer, string sequenceLabel, float delay) {
+			if (sequencer == null) {
+				Debug.LogError("[AnimSequencer] Cannot PlayDelayed. Sequencer is null.");
+				return;
+			}
+
+			PrimeTween.Tween.Delay(delay).OnComplete(() => {
+				if (sequencer != null) {
+					sequencer.PlayByLabel(sequenceLabel);
+				}
+			});
 		}
 		#endregion
 

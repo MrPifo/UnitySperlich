@@ -396,24 +396,23 @@ namespace Sperlich.Sequencer.Editor {
 				case AnimType.Bounce: if (isUI) Add(sp.FindPropertyRelative("bounceIntensity"), "Intensity"); else Add(sp.FindPropertyRelative("bounce3D"), "Bounce Vector"); Add(sp.FindPropertyRelative("bounceCount"), "Count"); break;
 				case AnimType.PunchRotate: if (isUI) BuildPunchRotateFields(c, sp, step); else Add(sp.FindPropertyRelative("punchRotate3D"), "Punch Vector"); break;
 				case AnimType.PunchScale:
-					if (isUI) {
-						var (useV3Row, useV3Pill) = MakeToggleField(sp.FindPropertyRelative("punchScaleUseVector3"), "Use Vector3", () => step.punchScaleUseVector3);
-						c.Add(useV3Row);
+					var (useV3Row, useV3Pill) = MakeToggleField(sp.FindPropertyRelative("punchScaleUseVector3"), "Use Vector3", () => step.punchScaleUseVector3);
+					c.Add(useV3Row);
 
-						var intensityField = new PropertyField(sp.FindPropertyRelative("punchScaleIntensity"), "Intensity");
-						var v3Field = new PropertyField(sp.FindPropertyRelative("punchScale3D"), "Punch Vector");
-						intensityField.Bind(serializedObject); v3Field.Bind(serializedObject);
-						c.Add(intensityField); c.Add(v3Field);
+					var intensityField = new PropertyField(sp.FindPropertyRelative("punchScaleIntensity"), "Intensity");
+					var v3Field = new PropertyField(sp.FindPropertyRelative("punchScale3D"), "Punch Vector");
+					intensityField.Bind(serializedObject);
+					v3Field.Bind(serializedObject);
+					c.Add(intensityField);
+					c.Add(v3Field);
 
-						void RefreshPunch() {
-							intensityField.style.display = step.punchScaleUseVector3 ? DisplayStyle.None : DisplayStyle.Flex;
-							v3Field.style.display = step.punchScaleUseVector3 ? DisplayStyle.Flex : DisplayStyle.None;
-						}
-						RefreshPunch();
-						useV3Pill.onValueChanged += RefreshPunch;
-					} else {
-						Add(sp.FindPropertyRelative("punchScale3D"), "Punch Vector");
+					void RefreshPunch() {
+						intensityField.style.display = step.punchScaleUseVector3 ? DisplayStyle.None : DisplayStyle.Flex;
+						v3Field.style.display = step.punchScaleUseVector3 ? DisplayStyle.Flex : DisplayStyle.None;
 					}
+
+					RefreshPunch();
+					useV3Pill.onValueChanged += RefreshPunch;
 					Add(sp.FindPropertyRelative("punchScaleFrequency"), "Frequency");
 					break;
 				case AnimType.ShakePosition: Add(sp.FindPropertyRelative("shakeStrength"), "Strength"); Add(sp.FindPropertyRelative("shakeFrequency"), "Frequency"); var (srPill, _) = MakeToggleField(sp.FindPropertyRelative("shakeFalloff"), "Falloff", () => step.shakeFalloff); c.Add(srPill); break;

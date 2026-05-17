@@ -137,6 +137,12 @@ namespace Sperlich.Core {
 		public static void Hide(this Transform transform) {
 			transform.gameObject.SetActive(false);
 		}
+		public static void Show(this RectTransform transform) {
+			transform.gameObject.SetActive(true);
+		}
+		public static void Hide(this RectTransform transform) {
+			transform.gameObject.SetActive(false);
+		}
 		public static RectTransform RectTransform(this Component t) {
 			return t.GetComponent<RectTransform>();
 		}

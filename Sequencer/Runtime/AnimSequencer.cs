@@ -14,6 +14,7 @@ namespace Sperlich.Sequencer {
 
 		bool _isPlayingDisableSequence;
 		bool _disabled;
+		bool _pendingOnEnable;
 		bool _internalDisable;
 
 		readonly Dictionary<string, List<Sequence>> _activeSequences = new();
@@ -30,7 +31,17 @@ namespace Sperlich.Sequencer {
 			}
 		}
 		void OnEnable() {
-			Play(TriggerType.OnEnable);
+			_pendingOnEnable = true;
+
+			foreach (var seq in sequences) {
+				if (seq.trigger != TriggerType.OnEnable) {
+					continue;
+				}
+				if (seq.steps == null || seq.steps.Count == 0) {
+					continue;
+				}
+				SnapStepsToStart(seq);
+			}
 		}
 		void OnDisable() {
 			if (_isPlayingDisableSequence || _internalDisable) {
@@ -70,10 +81,14 @@ namespace Sperlich.Sequencer {
 			_pollingWaits.Clear();
 		}
 		void Update() {
+			if (_pendingOnEnable) {
+				_pendingOnEnable = false;
+				Play(TriggerType.OnEnable);
+			}
 			for (int i = _pollingWaits.Count - 1; i >= 0; i--) {
 				var state = _pollingWaits[i];
 
-				if (state.seq.isPaused) {
+				if (state.seq.IsPaused) {
 					continue;
 				}
 
@@ -128,6 +143,38 @@ namespace Sperlich.Sequencer {
 					PlaySequence(seq);
 				} else if (!current && seq.trigger == TriggerType.OnBecameNonInteractable) {
 					PlaySequence(seq);
+				}
+			}
+
+			for (int i = sequences.Count - 1; i >= 0; i--) {
+				var seq = sequences[i];
+
+				if (!seq.IsPlaying) {
+					continue;
+				}
+
+				if (seq.activeTweens.Count == 0) {
+					continue;
+				}
+
+				bool allDead = true;
+
+				foreach (var tween in seq.activeTweens) {
+					if (tween.isAlive) {
+						allDead = false;
+						break;
+					}
+				}
+
+				if (allDead) {
+					seq.activeTweens.Clear();
+					_pollingWaits.RemoveAll(w => w.seq == seq);
+					seq.SetPlaying(false);
+					seq.SetPaused(false);
+
+					if (editorPlayingSeqIndex == i) {
+						editorPlayingSeqIndex = -1;
+					}
 				}
 			}
 		}
@@ -229,7 +276,9 @@ namespace Sperlich.Sequencer {
 		}
 
 		void StopSequenceInternal(AnimSequence seq) {
-			if (seq == null) return;
+			if (seq == null) {
+				return;
+			}
 
 			foreach (var tween in seq.activeTweens) {
 				if (tween.isAlive) {
@@ -239,8 +288,8 @@ namespace Sperlich.Sequencer {
 
 			seq.activeTweens.Clear();
 			_pollingWaits.RemoveAll(w => w.seq == seq);
+			seq.SetPlaying(false);
 
-			seq.isPlaying = false;
 			if (editorPlayingSeqIndex == sequences.IndexOf(seq)) {
 				editorPlayingSeqIndex = -1;
 			}
@@ -263,7 +312,7 @@ namespace Sperlich.Sequencer {
 				return;
 			}
 
-			seq.isPaused = paused;
+			seq.SetPaused(paused);
 
 			foreach (var tween in seq.activeTweens) {
 				if (tween.isAlive) {
@@ -283,19 +332,32 @@ namespace Sperlich.Sequencer {
 
 		public void PlaySequence(AnimSequence seq, bool isDisable = false) {
 			if (seq.steps == null || seq.steps.Count == 0) {
-				seq.onCompleteAction?.Invoke();
-				if (seq.isTemporary) sequences.Remove(seq);
+				if (seq.onCompleteAction != null) {
+					seq.onCompleteAction.Invoke();
+				}
+
+				if (seq.isTemporary) {
+					sequences.Remove(seq);
+				}
+
 				return;
 			}
 
-			// Falls die Sequenz bereits läuft, stoppen wir sie sauber vor dem Neustart
 			StopSequenceInternal(seq);
 
-			seq.isPlaying = true;
-			seq.onStart?.Invoke();
-			seq.onStartAction?.Invoke();
+			seq.SetPlaying(true);
+			seq.SetPaused(false);
+
+			if (seq.onStart != null) {
+				seq.onStart.Invoke();
+			}
+
+			if (seq.onStartAction != null) {
+				seq.onStartAction.Invoke();
+			}
 
 			int seqIndex = sequences.IndexOf(seq);
+
 			if (!isDisable) {
 				editorStepProgress = new float[seq.steps.Count];
 				editorPlayingSeqIndex = seqIndex;
@@ -311,7 +373,6 @@ namespace Sperlich.Sequencer {
 
 			var s = Sequence.Create();
 
-			// Tracking für PrimeTween
 			seq.activeTweens.Add(s);
 
 			float maxGroupTime = 0f;
@@ -348,7 +409,7 @@ namespace Sperlich.Sequencer {
 					endsSliceEarly = true;
 
 					s.Group(Tween.Delay(Mathf.Max(triggerTime, 0.001f)).OnComplete(() => {
-						if (!seq.isPlaying) return; // SCHUTZ: Slice nicht weiterführen, wenn gestoppt
+						if (!seq.IsPlaying) return;
 						HandleSliceBreak(bType, capturedStep, seq, seqIndex, breakIndex, rAnchor, isDisable);
 					}));
 
@@ -381,11 +442,11 @@ namespace Sperlich.Sequencer {
 
 					if (d <= 0f) {
 						ExecuteInstantStep(seq, seq.steps[ci], ct);
-						if (!seq.isPlaying) return; // WICHTIGSTER FIX: Schleife sofort abbrechen, wenn Instant-Step die Sequenz beendet hat!
+						if (!seq.IsPlaying) return;
 						s.Group(Tween.Delay(0.001f));
 					} else {
 						s.Group(Tween.Delay(d).OnComplete(() => {
-							if (!seq.isPlaying) return; // SCHUTZ: Verhindern, dass verzögerte Instant-Steps noch feuern
+							if (!seq.IsPlaying) return;
 							ExecuteInstantStep(seq, seq.steps[ci], ct);
 						}));
 					}
@@ -400,7 +461,7 @@ namespace Sperlich.Sequencer {
 							float delayTime = step.delay + currentTime;
 
 							s.Group(Tween.Delay(Mathf.Max(delayTime, 0.001f)).OnComplete(() => {
-								if (!seq.isPlaying || t == null) return; // SCHUTZ: Keine Transform-Resets mehr anwenden
+								if (!seq.IsPlaying || t == null) return;
 								if (tp == AnimType.Bounce || tp == AnimType.ShakePosition) t.localPosition = ip;
 								else if (tp == AnimType.PunchScale) t.localScale = isc;
 								else if (tp == AnimType.PunchRotate || tp == AnimType.ShakeRotation) t.localEulerAngles = ir;
@@ -450,24 +511,34 @@ namespace Sperlich.Sequencer {
 			}
 		}
 		void FinishSequence(AnimSequence seq, int seqIndex, bool isDisable) {
-			if (!seq.isPlaying) {
+			if (!seq.IsPlaying) {
 				return;
 			}
 
-			seq.isPlaying = false;
+			seq.SetPlaying(false);
+			seq.SetPaused(false);
 
-			if (seq.onEnd != null) seq.onEnd.Invoke();
-			if (seq.onCompleteAction != null) seq.onCompleteAction.Invoke();
+			if (seq.onEnd != null) {
+				seq.onEnd.Invoke();
+			}
+
+			if (seq.onCompleteAction != null) {
+				seq.onCompleteAction.Invoke();
+			}
 
 			string label = seq.label ?? "";
+
 			if (!string.IsNullOrEmpty(label) && _activeSequences.ContainsKey(label) && _activeSequences[label].Count == 0) {
 				_activeSequences.Remove(label);
 			}
 
-			if (editorPlayingSeqIndex == seqIndex) editorPlayingSeqIndex = -1;
+			if (editorPlayingSeqIndex == seqIndex) {
+				editorPlayingSeqIndex = -1;
+			}
 
 			if (isDisable) {
 				_isPlayingDisableSequence = false;
+
 				if (seq.deactivateAfter) {
 					try {
 						_internalDisable = true;
@@ -598,6 +669,122 @@ namespace Sperlich.Sequencer {
 			}
 
 			step.isInitialized = true;
+		}
+		void SnapStepsToStart(AnimSequence seq) {
+			bool sequentialBranchSnapped = false;
+
+			for (int i = 0; i < seq.steps.Count; i++) {
+				var step = seq.steps[i];
+
+				if (!step.enabled) {
+					continue;
+				}
+				if (step.animateFromCurrent) {
+					continue;
+				}
+				if (step.delay > 0f) {
+					continue;
+				}
+				if (IsLogicType(step.type) || IsInstantType(step.type)) {
+					continue;
+				}
+				if (step.mode == StepMode.Sequential && sequentialBranchSnapped) {
+					continue;
+				}
+
+				InitStepCache(step);
+
+				Transform t = step.resolvedTarget;
+				if (t == null) {
+					continue;
+				}
+
+				switch (step.type) {
+					case AnimType.Fade:
+						if (step.cachedCanvasGroup != null) {
+							step.cachedCanvasGroup.alpha = step.fadeFrom;
+						}
+						break;
+					case AnimType.Scale:
+						if (step.isUI && step.rectTarget != null) {
+							step.rectTarget.localScale = step.relativeOffset
+								? step.initialLocalScale + step.scaleFrom
+								: step.scaleFrom;
+						} else {
+							t.localScale = step.relativeOffset
+								? step.initialLocalScale + step.scaleFrom3D
+								: step.scaleFrom3D;
+						}
+						break;
+					case AnimType.Slide:
+						if (step.isUI && step.rectTarget != null) {
+							step.rectTarget.anchoredPosition = step.relativeOffset
+								? step.initialAnchoredPosition + step.slideFrom
+								: step.slideFrom;
+						} else {
+							t.localPosition = step.relativeOffset
+								? step.initialLocalPosition + (Vector3)step.slideFrom
+								: (Vector3)step.slideFrom;
+						}
+						break;
+					case AnimType.Rotate:
+						if (step.relativeOffset) {
+							t.localEulerAngles = step.initialLocalRotation + new Vector3(0, 0, step.rotateFrom);
+						} else {
+							t.localEulerAngles = new Vector3(step.initialLocalRotation.x, step.initialLocalRotation.y, step.rotateFrom);
+						}
+						break;
+					case AnimType.SizeDelta:
+						if (step.isUI && step.rectTarget != null) {
+							step.rectTarget.sizeDelta = step.relativeOffset
+								? step.initialSizeDelta + step.sizeDeltaFrom
+								: step.sizeDeltaFrom;
+						}
+						break;
+					case AnimType.FillAmount:
+						if (step.cachedImage != null) {
+							step.cachedImage.fillAmount = step.fillAmountFrom;
+						}
+						break;
+					case AnimType.ColorTint:
+						if (step.cachedGraphic != null) {
+							step.cachedGraphic.color = step.colorFrom;
+						}
+						break;
+					case AnimType.FadeSpriteColor:
+						if (step.cachedSpriteRenderer != null) {
+							step.cachedSpriteRenderer.color = step.colorFrom;
+						}
+						break;
+					case AnimType.TypeWriter:
+						if (step.cachedText != null) {
+							if (!string.IsNullOrEmpty(step.setTextValue)) {
+								step.cachedText.SetText(step.setTextValue);
+							}
+							step.cachedText.maxVisibleCharacters = 0;
+							step.cachedText.ForceMeshUpdate(true);
+						}
+						break;
+					case AnimType.TextCounter:
+						if (step.cachedText != null) {
+							step.textCounterCurrentValue = step.textCounterFrom;
+							step.cachedText.text = string.Format(
+								step.textCounterFormat,
+								step.textCounterRoundToInt ? Mathf.RoundToInt(step.textCounterFrom) : step.textCounterFrom
+							);
+						}
+						break;
+					case AnimType.FadeAudio:
+						if (step.cachedAudioSource != null) {
+							step.cachedAudioSource.volume = step.fadeAudioFrom;
+						}
+						break;
+				}
+
+				if (step.mode == StepMode.Sequential) {
+					sequentialBranchSnapped = true;
+				}
+			}
 		}
 
 		static bool IsInstantType(AnimType t) {
@@ -1101,10 +1288,15 @@ namespace Sperlich.Sequencer {
 
 			[System.NonSerialized] public System.Action onStartAction;
 			[System.NonSerialized] public System.Action onCompleteAction;
-			[System.NonSerialized] public bool isPlaying;
-			[System.NonSerialized] public bool isPaused;
 			[System.NonSerialized] public bool isTemporary;
-			[System.NonSerialized] public List<Sequence> activeTweens = new List<Sequence>();
+			[System.NonSerialized] internal List<Sequence> activeTweens = new();
+			[System.NonSerialized] private bool _isPlaying;
+			[System.NonSerialized] private bool _isPaused;
+
+			public bool IsPlaying => _isPlaying;
+			public bool IsPaused => _isPaused;
+			internal void SetPlaying(bool value) { _isPlaying = value; }
+			internal void SetPaused(bool value) { _isPaused = value; }
 
 #if UNITY_EDITOR
 			public bool isExpanded = true;
