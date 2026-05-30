@@ -411,7 +411,7 @@ namespace Sperlich.Sequencer {
 					s.Group(Tween.Delay(Mathf.Max(triggerTime, 0.001f)).OnComplete(() => {
 						if (!seq.IsPlaying) return;
 						HandleSliceBreak(bType, capturedStep, seq, seqIndex, breakIndex, rAnchor, isDisable);
-					}));
+					}, false));
 
 					maxGroupTime = Mathf.Max(maxGroupTime, triggerTime);
 					i++;
@@ -448,7 +448,7 @@ namespace Sperlich.Sequencer {
 						s.Group(Tween.Delay(d).OnComplete(() => {
 							if (!seq.IsPlaying) return;
 							ExecuteInstantStep(seq, seq.steps[ci], ct);
-						}));
+						}, false));
 					}
 				} else if (!IsLogicType(step.type)) {
 					if (!step.animateFromCurrent) {
@@ -465,7 +465,7 @@ namespace Sperlich.Sequencer {
 								if (tp == AnimType.Bounce || tp == AnimType.ShakePosition) t.localPosition = ip;
 								else if (tp == AnimType.PunchScale) t.localScale = isc;
 								else if (tp == AnimType.PunchRotate || tp == AnimType.ShakeRotation) t.localEulerAngles = ir;
-							}));
+							}, false));
 						}
 					}
 					s.Group(BuildTween(step, step.resolvedTarget, currentTime));
@@ -493,7 +493,7 @@ namespace Sperlich.Sequencer {
 				if (breakEndIndex >= seq.steps.Count && !endsSliceEarly) {
 					FinishSequence(seq, seqIndex, isDisable);
 				}
-			});
+			}, false);
 		}
 		void HandleSliceBreak(AnimType bType, AnimStep step, AnimSequence seq, int seqIndex, int breakIndex, string rAnchor, bool isDisable) {
 			if (bType == AnimType.WaitUntil || (bType == AnimType.Wait && step.waitMethod == WaitMethod.Frames)) {
@@ -985,31 +985,21 @@ namespace Sperlich.Sequencer {
 				case AnimType.Scale:
 					if (step.relativeOffset) {
 						if (step.isUI) {
-							Vector3 start = default;
-							bool init = false;
+							Vector3 baseScale = step.initialLocalScale;
 							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
-								if (!init) {
-									start = obj.localScale;
-									init = true;
-								}
 								if (step.animateFromCurrent) {
-									obj.localScale = Vector3.LerpUnclamped(start, start + step.scaleTo, v);
+									obj.localScale = Vector3.LerpUnclamped(baseScale, baseScale + step.scaleTo, v);
 								} else {
-									obj.localScale = Vector3.LerpUnclamped(start + step.scaleFrom, start + step.scaleTo, v);
+									obj.localScale = Vector3.LerpUnclamped(baseScale + step.scaleFrom, baseScale + step.scaleTo, v);
 								}
 							});
 						} else {
-							Vector3 start = default;
-							bool init = false;
+							Vector3 baseScale = step.initialLocalScale;
 							return Tween.Custom(t, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
-								if (!init) {
-									start = obj.localScale;
-									init = true;
-								}
 								if (step.animateFromCurrent) {
-									obj.localScale = Vector3.LerpUnclamped(start, start + step.scaleTo3D, v);
+									obj.localScale = Vector3.LerpUnclamped(baseScale, baseScale + step.scaleTo3D, v);
 								} else {
-									obj.localScale = Vector3.LerpUnclamped(start + step.scaleFrom3D, start + step.scaleTo3D, v);
+									obj.localScale = Vector3.LerpUnclamped(baseScale + step.scaleFrom3D, baseScale + step.scaleTo3D, v);
 								}
 							});
 						}
@@ -1031,31 +1021,21 @@ namespace Sperlich.Sequencer {
 				case AnimType.Slide:
 					if (step.relativeOffset) {
 						if (step.isUI) {
-							Vector2 start = default;
-							bool init = false;
+							Vector2 basePos = step.initialAnchoredPosition;
 							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
-								if (!init) {
-									start = obj.anchoredPosition;
-									init = true;
-								}
 								if (step.animateFromCurrent) {
-									obj.anchoredPosition = Vector2.LerpUnclamped(start, start + step.slideTo, v);
+									obj.anchoredPosition = Vector2.LerpUnclamped(basePos, basePos + step.slideTo, v);
 								} else {
-									obj.anchoredPosition = Vector2.LerpUnclamped(start + step.slideFrom, start + step.slideTo, v);
+									obj.anchoredPosition = Vector2.LerpUnclamped(basePos + step.slideFrom, basePos + step.slideTo, v);
 								}
 							});
 						} else {
-							Vector3 start = default;
-							bool init = false;
+							Vector3 basePos = step.initialLocalPosition;
 							return Tween.Custom(t, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
-								if (!init) {
-									start = obj.localPosition;
-									init = true;
-								}
 								if (step.animateFromCurrent) {
-									obj.localPosition = Vector3.LerpUnclamped(start, start + (Vector3)step.slideTo, v);
+									obj.localPosition = Vector3.LerpUnclamped(basePos, basePos + (Vector3)step.slideTo, v);
 								} else {
-									obj.localPosition = Vector3.LerpUnclamped(start + (Vector3)step.slideFrom, start + (Vector3)step.slideTo, v);
+									obj.localPosition = Vector3.LerpUnclamped(basePos + (Vector3)step.slideFrom, basePos + (Vector3)step.slideTo, v);
 								}
 							});
 						}
@@ -1076,17 +1056,12 @@ namespace Sperlich.Sequencer {
 					}
 				case AnimType.Rotate:
 					if (step.relativeOffset) {
-						Vector3 start = default;
-						bool init = false;
+						Vector3 baseRot = step.initialLocalRotation;
 						return Tween.Custom(t, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
-							if (!init) {
-								start = obj.localEulerAngles;
-								init = true;
-							}
 							if (step.animateFromCurrent) {
-								obj.localEulerAngles = Vector3.LerpUnclamped(start, start + new Vector3(0, 0, step.rotateTo), v);
+								obj.localEulerAngles = Vector3.LerpUnclamped(baseRot, baseRot + new Vector3(0, 0, step.rotateTo), v);
 							} else {
-								obj.localEulerAngles = Vector3.LerpUnclamped(start + new Vector3(0, 0, step.rotateFrom), start + new Vector3(0, 0, step.rotateTo), v);
+								obj.localEulerAngles = Vector3.LerpUnclamped(baseRot + new Vector3(0, 0, step.rotateFrom), baseRot + new Vector3(0, 0, step.rotateTo), v);
 							}
 						});
 					} else {
@@ -1100,17 +1075,12 @@ namespace Sperlich.Sequencer {
 				case AnimType.SizeDelta:
 					if (step.isUI) {
 						if (step.relativeOffset) {
-							Vector2 start = default;
-							bool init = false;
+							Vector2 baseSize = step.initialSizeDelta;
 							return Tween.Custom(step.rectTarget, new TweenSettings<float>(0f, 1f, settings), (obj, v) => {
-								if (!init) {
-									start = obj.sizeDelta;
-									init = true;
-								}
 								if (step.animateFromCurrent) {
-									obj.sizeDelta = Vector2.LerpUnclamped(start, start + step.sizeDeltaTo, v);
+									obj.sizeDelta = Vector2.LerpUnclamped(baseSize, baseSize + step.sizeDeltaTo, v);
 								} else {
-									obj.sizeDelta = Vector2.LerpUnclamped(start + step.sizeDeltaFrom, start + step.sizeDeltaTo, v);
+									obj.sizeDelta = Vector2.LerpUnclamped(baseSize + step.sizeDeltaFrom, baseSize + step.sizeDeltaTo, v);
 								}
 							});
 						} else {
