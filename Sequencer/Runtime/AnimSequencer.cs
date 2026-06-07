@@ -205,6 +205,9 @@ namespace Sperlich.Sequencer {
 		}
 
 		public void Play(TriggerType trigger) {
+			if (trigger == TriggerType.OnEnable) {
+				_pendingOnEnable = false;
+			}
 			if (_disabled) {
 				return;
 			}

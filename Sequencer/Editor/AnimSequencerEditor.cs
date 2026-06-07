@@ -64,6 +64,15 @@ namespace Sperlich.Sequencer.Editor {
 		VisualElement _root;
 		double _pasteSuccessTime = 0;
 
+		// Step drag-and-drop state
+		bool _isDraggingStep;
+		bool _dragPointerDown;
+		bool _suppressNextClick;
+		int _dragSeqIdx = -1, _dragStepIdx = -1, _dragInsertIdx = -1;
+		Vector2 _dragPointerStartPos;
+		float _indicatorTargetY, _indicatorCurrentY;
+		VisualElement _dragIndicator;
+
 		void OnEnable() { Undo.undoRedoPerformed += OnUndoRedoPerformed; }
 		void OnDisable() { Undo.undoRedoPerformed -= OnUndoRedoPerformed; }
 
@@ -182,7 +191,7 @@ namespace Sperlich.Sequencer.Editor {
 			body.Add(triggerField); body.Add(triggerWarning); body.Add(deactivateField); body.Add(selectableField); body.Add(Spacer(6));
 
 			var stepsContainer = new VisualElement(); body.Add(stepsContainer);
-			void RebuildSteps() { serializedObject.Update(); stepsContainer.Clear(); for (int i = 0; i < seq.steps.Count; i++) stepsContainer.Add(BuildStepElement(seqIndex, i, RebuildSteps)); }
+			void RebuildSteps() { serializedObject.Update(); stepsContainer.Clear(); for (int i = 0; i < seq.steps.Count; i++) stepsContainer.Add(BuildStepElement(seqIndex, i, RebuildSteps, stepsContainer)); }
 			RebuildSteps();
 
 			var addStepBtn = new Button(() => { Undo.RecordObject(_sequencer, "Add Step"); seq.steps.Add(new AnimStep()); EditorUtility.SetDirty(_sequencer); RebuildSteps(); }) { text = "+ Add Step", style = { height = 22, marginTop = 4 } }; ApplyNeonButtonStyle(addStepBtn);
@@ -210,17 +219,129 @@ namespace Sperlich.Sequencer.Editor {
 			titleLabel.text = seq.label;
 		}
 
-		VisualElement BuildStepElement(int seqIndex, int stepIndex, System.Action rebuild) {
+		VisualElement BuildStepElement(int seqIndex, int stepIndex, System.Action rebuild, VisualElement stepsContainer = null) {
 			var seq = _sequencer.sequences[seqIndex]; var step = seq.steps[stepIndex]; Color typeColor = GetAnimTypeColor(step);
 			var stepBox = CreateBox(3, new Color(0.28f, 0.28f, 0.28f)); stepBox.style.marginBottom = 4;
 			var (stepHeader, colorBar, arrowLabel, infoLabel, tagLabel, modeEl, iconLabel, warningIcon) = MakeStepHeader(step, seqIndex, stepIndex, typeColor, seq, rebuild);
 			stepBox.Add(stepHeader); stepBox.Add(MakeProgressBar(seqIndex, stepIndex, typeColor));
 			var stepBody = new VisualElement { style = { paddingLeft = 8, paddingRight = 8, paddingTop = 6, paddingBottom = 6, backgroundColor = new StyleColor(BgStepBody), display = step.isExpanded ? DisplayStyle.Flex : DisplayStyle.None } };
 			stepHeader.RegisterCallback<ClickEvent>(evt => {
+				if (_suppressNextClick) { _suppressNextClick = false; return; }
 				if (evt.button != 0 || evt.target is Button || (evt.target as VisualElement)?.parent is Button || evt.target is Toggle || (evt.target as VisualElement)?.parent is Toggle) return;
 				step.isExpanded = !step.isExpanded; stepBody.style.display = step.isExpanded ? DisplayStyle.Flex : DisplayStyle.None; arrowLabel.text = step.isExpanded ? "▼" : "▶"; EditorUtility.SetDirty(_sequencer);
 			});
-			BuildStepBody(stepBody, seqIndex, stepIndex, colorBar, infoLabel, tagLabel, modeEl, iconLabel, warningIcon, step); stepBox.Add(stepBody); return stepBox;
+			stepHeader.tooltip = GetStepTooltip(step);
+			BuildStepBody(stepBody, seqIndex, stepIndex, colorBar, infoLabel, tagLabel, modeEl, iconLabel, warningIcon, step, () => stepHeader.tooltip = GetStepTooltip(step));
+			stepBox.Add(stepBody);
+
+			// Drag-and-drop reordering — entire header is the drag surface
+			if (stepsContainer != null) {
+				Color dragAccent = new Color(0.3f, 0.85f, 1f);
+				Color origBorder = new Color(0.28f, 0.28f, 0.28f);
+
+				stepHeader.RegisterCallback<PointerDownEvent>(evt => {
+					if (evt.button != 0) return;
+					var t = evt.target as VisualElement;
+					if (t is Button || t?.parent is Button || t is Toggle || t?.parent is Toggle) return;
+					_dragPointerDown = true; _suppressNextClick = false;
+					_dragPointerStartPos = new Vector2(evt.position.x, evt.position.y);
+					_dragSeqIdx = seqIndex; _dragStepIdx = stepIndex; _dragInsertIdx = stepIndex;
+				});
+
+				stepHeader.RegisterCallback<PointerMoveEvent>(evt => {
+					if (!_dragPointerDown || _dragSeqIdx != seqIndex) return;
+					var curPos = new Vector2(evt.position.x, evt.position.y);
+					if (!_isDraggingStep) {
+						if (Vector2.Distance(curPos, _dragPointerStartPos) < 5f) return;
+						// Threshold crossed — activate drag
+						_isDraggingStep = true; _suppressNextClick = true;
+						stepBox.style.opacity = 0.5f;
+						stepBox.style.borderTopColor = new StyleColor(new Color(dragAccent.r, dragAccent.g, dragAccent.b, 0.7f));
+						stepBox.style.borderBottomColor = new StyleColor(new Color(dragAccent.r, dragAccent.g, dragAccent.b, 0.7f));
+						stepBox.style.borderLeftColor = new StyleColor(new Color(dragAccent.r, dragAccent.g, dragAccent.b, 0.7f));
+						stepBox.style.borderRightColor = new StyleColor(new Color(dragAccent.r, dragAccent.g, dragAccent.b, 0.7f));
+						if (_dragIndicator == null) {
+							_dragIndicator = new VisualElement { style = { position = Position.Absolute, left = 6, right = 6, height = 3, backgroundColor = new StyleColor(dragAccent), borderTopLeftRadius = 2, borderTopRightRadius = 2, borderBottomLeftRadius = 2, borderBottomRightRadius = 2, display = DisplayStyle.None } };
+							stepsContainer.Add(_dragIndicator);
+							float initY = GetDragIndicatorY(stepsContainer, _dragInsertIdx) - 1;
+							_indicatorCurrentY = initY; _indicatorTargetY = initY;
+							// Lerp animation schedule — runs every 16ms while indicator exists
+							_dragIndicator.schedule.Execute(() => {
+								if (_dragIndicator == null || !_isDraggingStep) return;
+								_indicatorCurrentY += (_indicatorTargetY - _indicatorCurrentY) * 0.35f;
+								_dragIndicator.style.top = _indicatorCurrentY;
+								_dragIndicator.style.display = DisplayStyle.Flex;
+							}).Every(16);
+						}
+						stepHeader.CapturePointer(evt.pointerId);
+					}
+					// Update indicator target
+					var localY = stepsContainer.WorldToLocal(curPos).y;
+					int newIdx = GetDragInsertIdx(stepsContainer, localY);
+					if (newIdx != _dragInsertIdx) {
+						_dragInsertIdx = newIdx;
+						_indicatorTargetY = GetDragIndicatorY(stepsContainer, _dragInsertIdx) - 1;
+					}
+				});
+
+				stepHeader.RegisterCallback<PointerUpEvent>(evt => {
+					if (!_dragPointerDown || _dragSeqIdx != seqIndex) return;
+					_dragPointerDown = false;
+					if (!_isDraggingStep) return;
+					stepHeader.ReleasePointer(evt.pointerId);
+					_isDraggingStep = false;
+					stepBox.style.opacity = 1f;
+					stepBox.style.borderTopColor = new StyleColor(origBorder); stepBox.style.borderBottomColor = new StyleColor(origBorder);
+					stepBox.style.borderLeftColor = new StyleColor(origBorder); stepBox.style.borderRightColor = new StyleColor(origBorder);
+					if (_dragIndicator != null) { _dragIndicator.RemoveFromHierarchy(); _dragIndicator = null; }
+					int from = _dragStepIdx, rawTo = _dragInsertIdx;
+					_dragSeqIdx = -1; _dragStepIdx = -1; _dragInsertIdx = -1;
+					int to = rawTo > from ? rawTo - 1 : rawTo;
+					if (from != to && from >= 0 && to >= 0 && to < seq.steps.Count) {
+						Undo.RecordObject(_sequencer, "Reorder Steps");
+						var moved = seq.steps[from]; seq.steps.RemoveAt(from); seq.steps.Insert(to, moved);
+						EditorUtility.SetDirty(_sequencer); rebuild();
+					}
+					evt.StopPropagation();
+				});
+
+				stepHeader.RegisterCallback<PointerCancelEvent>(evt => {
+					if (!_dragPointerDown || _dragSeqIdx != seqIndex) return;
+					_dragPointerDown = false;
+					if (!_isDraggingStep) return;
+					stepHeader.ReleasePointer(evt.pointerId);
+					_isDraggingStep = false; stepBox.style.opacity = 1f;
+					stepBox.style.borderTopColor = new StyleColor(origBorder); stepBox.style.borderBottomColor = new StyleColor(origBorder);
+					stepBox.style.borderLeftColor = new StyleColor(origBorder); stepBox.style.borderRightColor = new StyleColor(origBorder);
+					if (_dragIndicator != null) { _dragIndicator.RemoveFromHierarchy(); _dragIndicator = null; }
+					_dragSeqIdx = -1; _dragStepIdx = -1; _dragInsertIdx = -1;
+				});
+			}
+
+			return stepBox;
+		}
+
+		int GetDragInsertIdx(VisualElement container, float localY) {
+			int visualIdx = 0;
+			for (int i = 0; i < container.childCount; i++) {
+				var child = container[i];
+				if (child == _dragIndicator) continue;
+				if (localY < child.layout.yMin + child.layout.height * 0.5f) return visualIdx;
+				visualIdx++;
+			}
+			return visualIdx;
+		}
+
+		float GetDragIndicatorY(VisualElement container, int insertIdx) {
+			int visualIdx = 0;
+			VisualElement last = null;
+			for (int i = 0; i < container.childCount; i++) {
+				var child = container[i];
+				if (child == _dragIndicator) continue;
+				if (visualIdx == insertIdx) return child.layout.yMin;
+				last = child; visualIdx++;
+			}
+			return last != null ? last.layout.yMax : 0;
 		}
 
 		(VisualElement header, VisualElement colorBar, Label arrow, Label info, Label tagLabel, Label modeEl, Label iconLabel, Image warningIcon)
@@ -232,6 +353,12 @@ namespace Sperlich.Sequencer.Editor {
 					string clip = EditorGUIUtility.systemCopyBuffer;
 					if (clip != null && clip.StartsWith("ANIMSEQ_STEP:")) { Undo.RecordObject(_sequencer, "Paste Step"); seq.steps[stepIndex] = JsonUtility.FromJson<AnimStep>(clip.Substring(13)); EditorUtility.SetDirty(_sequencer); rebuild(); }
 				}, a => EditorGUIUtility.systemCopyBuffer != null && EditorGUIUtility.systemCopyBuffer.StartsWith("ANIMSEQ_STEP:") ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+				evt.menu.AppendAction("Duplicate Step", a => {
+					Undo.RecordObject(_sequencer, "Duplicate Step");
+					var clone = JsonUtility.FromJson<AnimStep>(JsonUtility.ToJson(step));
+					seq.steps.Insert(stepIndex + 1, clone);
+					EditorUtility.SetDirty(_sequencer); rebuild();
+				});
 			}));
 			var colorBar = new VisualElement { style = { width = 5, alignSelf = Align.Stretch, backgroundColor = step.enabled ? new StyleColor(typeColor) : new StyleColor(new Color(0.4f, 0.4f, 0.4f)) } };
 			var arrow = new Label(step.isExpanded ? "▼" : "▶") { style = { marginLeft = 6, marginRight = 4, fontSize = 9, width = 12, color = new StyleColor(new Color(0.7f, 0.7f, 0.7f)) } };
@@ -244,10 +371,8 @@ namespace Sperlich.Sequencer.Editor {
 			var tagLabel = new Label(string.IsNullOrEmpty(step.tag) ? "" : $"[{step.tag}]") { style = { fontSize = 11, color = new StyleColor(new Color(0.75f, 0.75f, 0.75f)), marginRight = 4, display = string.IsNullOrEmpty(step.tag) ? DisplayStyle.None : DisplayStyle.Flex } };
 			var iconLabel = new Label("") { style = { fontSize = 14, color = new StyleColor(new Color(0.7f, 0.7f, 0.7f)), marginLeft = 4, marginRight = 8, display = DisplayStyle.None } };
 			var warningIcon = new Image { image = EditorGUIUtility.IconContent("console.warnicon.sml").image, style = { width = 14, height = 14, marginRight = 4, display = DisplayStyle.None } };
-			var upBtn = MakeSmallButton("↑", 18, () => { if (stepIndex <= 0) return; Undo.RecordObject(_sequencer, "Move Step Up"); var temp = seq.steps[stepIndex - 1]; seq.steps[stepIndex - 1] = seq.steps[stepIndex]; seq.steps[stepIndex] = temp; EditorUtility.SetDirty(_sequencer); rebuild(); }); upBtn.SetEnabled(stepIndex > 0);
-			var downBtn = MakeSmallButton("↓", 18, () => { if (stepIndex >= seq.steps.Count - 1) return; Undo.RecordObject(_sequencer, "Move Step Down"); var temp = seq.steps[stepIndex + 1]; seq.steps[stepIndex + 1] = seq.steps[stepIndex]; seq.steps[stepIndex] = temp; EditorUtility.SetDirty(_sequencer); rebuild(); }); downBtn.SetEnabled(stepIndex < seq.steps.Count - 1);
 			var removeBtn = MakeSmallButton("✕", 22, () => { Undo.RecordObject(_sequencer, "Remove Step"); seq.steps.RemoveAt(stepIndex); EditorUtility.SetDirty(_sequencer); rebuild(); }); removeBtn.style.marginRight = 4;
-			header.Add(colorBar); header.Add(arrow); header.Add(enableToggle); header.Add(modeEl); header.Add(info); header.Add(tagLabel); header.Add(iconLabel); header.Add(warningIcon); header.Add(upBtn); header.Add(downBtn); header.Add(removeBtn);
+			header.Add(colorBar); header.Add(arrow); header.Add(enableToggle); header.Add(modeEl); header.Add(info); header.Add(tagLabel); header.Add(iconLabel); header.Add(warningIcon); header.Add(removeBtn);
 			return (header, colorBar, arrow, info, tagLabel, modeEl, iconLabel, warningIcon);
 		}
 
@@ -274,7 +399,7 @@ namespace Sperlich.Sequencer.Editor {
 			valid.Sort(); return valid;
 		}
 
-		void BuildStepBody(VisualElement body, int seqIndex, int stepIndex, VisualElement colorBar, Label infoLabel, Label tagLabel, Label modeEl, Label iconLabel, Image warningIcon, AnimStep step) {
+		void BuildStepBody(VisualElement body, int seqIndex, int stepIndex, VisualElement colorBar, Label infoLabel, Label tagLabel, Label modeEl, Label iconLabel, Image warningIcon, AnimStep step, System.Action onTypeChanged = null) {
 			var stepProp = GetStepProp(seqIndex, stepIndex);
 
 			bool GetCurrentIsUI() { var t = stepProp.FindPropertyRelative("target").objectReferenceValue as Transform; return t != null ? t is RectTransform : IsSequencerUI(); }
@@ -344,6 +469,7 @@ namespace Sperlich.Sequencer.Editor {
 					colorBar.style.backgroundColor = new StyleColor(step.enabled ? GetAnimTypeColor(step) : new Color(0.4f, 0.4f, 0.4f));
 					infoLabel.text = BuildStepTypeInfo(step); colorBar.parent.style.backgroundColor = new StyleColor(step.type == AnimType.Anchor ? new Color(ColorAnchor.r, ColorAnchor.g, ColorAnchor.b, 0.4f) : BgStep);
 					modeEl.style.display = IsModeHidden(step.type) ? DisplayStyle.None : DisplayStyle.Flex;
+					onTypeChanged?.Invoke();
 					RefreshStepBodyVisibility(body, step); BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body); UpdateContextWarning();
 				}
 			});
@@ -562,8 +688,6 @@ namespace Sperlich.Sequencer.Editor {
 					break;
 
 				case AnimType.Destroy:
-					var destroyNote = new Label("Destroys the target GameObject.\nLeave target empty to destroy this object.") { style = { fontSize = 10, color = new StyleColor(new Color(0.65f, 0.65f, 0.65f)), whiteSpace = WhiteSpace.Normal, marginBottom = 2 } };
-					c.Add(destroyNote);
 					break;
 				case AnimType.Trigger:
 					var seqField = MakeTargetField(sp.FindPropertyRelative("triggerSequencer"), "Sequencer"); seqField.RegisterValueChangeCallback(evt => { step.triggerSequencer = evt.changedProperty.objectReferenceValue as AnimSequencer; infoLabel.text = BuildStepTypeInfo(step); }); c.Add(seqField);
@@ -736,6 +860,55 @@ namespace Sperlich.Sequencer.Editor {
 				case AnimType.WaitUntil: return ColorWaitUntil;
 				case AnimType.Destroy: return new Color(0.85f, 0.22f, 0.22f);
 				default: return Color.gray;
+			}
+		}
+
+		static string GetStepTooltip(AnimStep step) {
+			switch (step.type) {
+				case AnimType.Fade:          return "Tweens a CanvasGroup alpha from → to.";
+				case AnimType.Scale:         return "Tweens localScale of the target.";
+				case AnimType.Slide:         return "Tweens anchoredPosition (UI) or localPosition (3D).";
+				case AnimType.Rotate:        return "Tweens Z rotation (UI) or localEulerAngles (3D).";
+				case AnimType.SizeDelta:     return "Tweens RectTransform.sizeDelta.";
+				case AnimType.FillAmount:    return "Tweens Image.fillAmount.";
+				case AnimType.Bounce:        return "Punches the position upward and back (Y-axis spring).";
+				case AnimType.PunchRotate:   return "Punches the rotation and springs back to rest.";
+				case AnimType.PunchScale:    return "Punches the scale and springs back to rest.";
+				case AnimType.ShakePosition: return "Shakes the local position with configurable strength and frequency.";
+				case AnimType.ShakeRotation: return "Shakes the local rotation with configurable strength and frequency.";
+				case AnimType.ColorTint:     return "Tweens a Graphic color (Image or TMP_Text).";
+				case AnimType.FadeSpriteColor: return "Tweens a SpriteRenderer color.";
+				case AnimType.MaterialProperty: return "Tweens a float or color property on a Material.";
+				case AnimType.TypeWriter:    return "Reveals TMP_Text character by character at a given speed.";
+				case AnimType.TextCounter:   return "Counts a TMP_Text number from → to over the duration.";
+				case AnimType.PlayAudio:     return "Fires AudioSource.PlayOneShot with optional pitch/volume randomization.";
+				case AnimType.FadeAudio:     return "Tweens AudioSource.volume.";
+				case AnimType.TimeScale:     return "Tweens Time.timeScale (uses unscaled time internally).";
+				case AnimType.Wait:          return step.waitMethod == WaitMethod.Frames ? "Pauses the sequence for a fixed number of frames." : "Pauses the sequence for a duration in seconds.";
+				case AnimType.WaitUntil:     return "Pauses the sequence until a condition/flag becomes true.";
+				case AnimType.Anchor:        return $"Jump target '#{step.anchorLabel}' — used as destination for Repeat steps.";
+				case AnimType.Repeat:        return $"Jumps back to anchor '#{step.repeatAnchorLabel}', creating a loop.";
+				case AnimType.Trigger:       return "Plays a named sequence on another AnimSequencer.";
+				case AnimType.Event:         return "Fires a UnityEvent.";
+				case AnimType.ControlSequence: return "Stops, completes, pauses or resumes a sequence at runtime.";
+				case AnimType.Destroy:       return "Destroys the target GameObject.\nLeave target empty to destroy this object.";
+				case AnimType.SetProperty:
+					switch (step.setPropertyType) {
+						case SetPropertyType.Active:           return "Instantly sets a GameObject active or inactive.";
+						case SetPropertyType.Transform:        return "Instantly sets localPosition, localRotation or localScale.";
+						case SetPropertyType.Color:            return "Instantly sets an Image or TMP_Text color.";
+						case SetPropertyType.Fade:             return "Instantly sets a CanvasGroup alpha.";
+						case SetPropertyType.Text:             return "Instantly sets a TMP_Text string.";
+						case SetPropertyType.Sprite:           return "Instantly sets a SpriteRenderer sprite.";
+						case SetPropertyType.Image:            return "Instantly sets an Image sprite.";
+						case SetPropertyType.CanvasGroupState: return "Instantly sets interactable / blocksRaycasts / ignoreParentGroups.";
+						case SetPropertyType.TimeScale:        return "Instantly sets Time.timeScale.";
+						case SetPropertyType.SizeDelta:        return "Instantly sets RectTransform.sizeDelta.";
+						case SetPropertyType.Pivot:            return "Instantly sets RectTransform.pivot.";
+						default: return "Instantly sets a property.";
+					}
+				case AnimType.SetMaterialProperty: return "Instantly sets a float or color property on a Material.";
+				default: return step.type.ToString();
 			}
 		}
 
