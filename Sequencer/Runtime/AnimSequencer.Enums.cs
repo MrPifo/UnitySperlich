@@ -48,6 +48,7 @@ namespace Sperlich.Sequencer {
 		Wait = 11,
 		WaitUntil = 22,
 		ControlSequence = 53,
+		Destroy = 54,
 	}
 
 	public enum SetPropertyType {

@@ -561,6 +561,10 @@ namespace Sperlich.Sequencer.Editor {
 					});
 					break;
 
+				case AnimType.Destroy:
+					var destroyNote = new Label("Destroys the target GameObject.\nLeave target empty to destroy this object.") { style = { fontSize = 10, color = new StyleColor(new Color(0.65f, 0.65f, 0.65f)), whiteSpace = WhiteSpace.Normal, marginBottom = 2 } };
+					c.Add(destroyNote);
+					break;
 				case AnimType.Trigger:
 					var seqField = MakeTargetField(sp.FindPropertyRelative("triggerSequencer"), "Sequencer"); seqField.RegisterValueChangeCallback(evt => { step.triggerSequencer = evt.changedProperty.objectReferenceValue as AnimSequencer; infoLabel.text = BuildStepTypeInfo(step); }); c.Add(seqField);
 					var lblField = new PropertyField(sp.FindPropertyRelative("triggerSequenceLabel"), "Sequence Label"); lblField.Bind(serializedObject); lblField.RegisterValueChangeCallback(evt => { step.triggerSequenceLabel = evt.changedProperty.stringValue; infoLabel.text = BuildStepTypeInfo(step); }); c.Add(lblField); break;
@@ -638,7 +642,7 @@ namespace Sperlich.Sequencer.Editor {
 		}
 
 		static bool IsInstantType(AnimType t) {
-			return t == AnimType.Trigger || t == AnimType.Event || t == AnimType.PlayAudio || t == AnimType.SetProperty || t == AnimType.SetMaterialProperty || t == AnimType.ControlSequence;
+			return t == AnimType.Trigger || t == AnimType.Event || t == AnimType.PlayAudio || t == AnimType.SetProperty || t == AnimType.SetMaterialProperty || t == AnimType.ControlSequence || t == AnimType.Destroy;
 		}
 		static bool IsLogicType(AnimType t) { return t == AnimType.Anchor || t == AnimType.Repeat || t == AnimType.WaitUntil; }
 		static bool IsModeHidden(AnimType t) { return t == AnimType.Anchor; }
@@ -683,6 +687,7 @@ namespace Sperlich.Sequencer.Editor {
 				case AnimType.Anchor: return $"<b><color=#888888>#</color><color=#ffffff>{step.anchorLabel}</color></b>";
 				case AnimType.Repeat: return $"<b>Repeat</b> (→ <color=#888888>#</color><color=#ffffff>{step.repeatAnchorLabel}</color>){delay}";
 				case AnimType.WaitUntil: return $"<b>WaitUntil</b>{delay}";
+				case AnimType.Destroy: return $"<b>Destroy</b>  {(step.target != null ? step.target.name : "<color=#888888>Self</color>")}{delay}";
 				default: return $"<b>{step.type}{rel}</b>  {Dur(step.duration)}{delay}";
 			}
 		}
@@ -729,6 +734,7 @@ namespace Sperlich.Sequencer.Editor {
 				case AnimType.Anchor: return ColorAnchor;
 				case AnimType.Repeat: return ColorRepeat;
 				case AnimType.WaitUntil: return ColorWaitUntil;
+				case AnimType.Destroy: return new Color(0.85f, 0.22f, 0.22f);
 				default: return Color.gray;
 			}
 		}

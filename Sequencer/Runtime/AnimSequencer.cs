@@ -516,9 +516,9 @@ namespace Sperlich.Sequencer {
 						if (step.type == AnimType.Bounce || step.type == AnimType.PunchScale || step.type == AnimType.PunchRotate || step.type == AnimType.ShakePosition || step.type == AnimType.ShakeRotation) {
 							var t = step.resolvedTarget;
 							var tp = step.type;
-							var ip = step.initialLocalPosition;
-							var ir = step.initialLocalRotation;
-							var isc = step.initialLocalScale;
+							var ip = t != null ? t.localPosition : step.initialLocalPosition;
+							var ir = t != null ? t.localEulerAngles : step.initialLocalRotation;
+							var isc = t != null ? t.localScale : step.initialLocalScale;
 							float delayTime = step.delay + currentTime;
 
 							s.Group(Tween.Delay(Mathf.Max(delayTime, 0.001f)).OnComplete(() => {
@@ -622,7 +622,8 @@ namespace Sperlich.Sequencer {
 		}
 		void InitStepCache(AnimStep step) {
 			if (step.type == AnimType.Trigger || step.type == AnimType.Event || step.type == AnimType.PlayAudio ||
-				step.type == AnimType.SetProperty || step.type == AnimType.SetMaterialProperty || step.type == AnimType.ControlSequence) {
+				step.type == AnimType.SetProperty || step.type == AnimType.SetMaterialProperty || step.type == AnimType.ControlSequence ||
+				step.type == AnimType.Destroy) {
 				step.duration = 0f;
 			}
 
@@ -854,7 +855,8 @@ namespace Sperlich.Sequencer {
 				   t == AnimType.PlayAudio ||
 				   t == AnimType.SetProperty ||
 				   t == AnimType.SetMaterialProperty ||
-				   t == AnimType.ControlSequence;
+				   t == AnimType.ControlSequence ||
+				   t == AnimType.Destroy;
 		}
 		static bool IsLogicType(AnimType type) {
 			return type == AnimType.Anchor || type == AnimType.Repeat || type == AnimType.WaitUntil;
@@ -1023,6 +1025,17 @@ namespace Sperlich.Sequencer {
 								case SequenceControlType.Resume: ctrlSeq.SetPausedInternal(tSeq, false); break;
 							}
 						}
+					}
+					break;
+				case AnimType.Destroy:
+					if (step.resolvedTarget != null && step.resolvedTarget != this.transform) {
+						// Destroy a specific target GameObject
+						Object.Destroy(step.resolvedTarget.gameObject);
+					} else {
+						// Self-destroy: stop all tweens first, suppress OnDisable sequences, then destroy
+						StopAll();
+						_internalDisable = true;
+						Object.Destroy(gameObject);
 					}
 					break;
 			}

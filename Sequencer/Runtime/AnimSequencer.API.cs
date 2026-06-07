@@ -613,6 +613,13 @@ namespace Sperlich.Sequencer {
 		}
 	}
 
+	public class DestroyConfig : AnimConfig {
+		/// <summary>The GameObject to destroy. Leave null to destroy the AnimSequencer's own GameObject.</summary>
+		public Transform target;
+		public override AnimType GetAnimType() { return AnimType.Destroy; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.target = target; }
+	}
+
 	public class ControlSequenceConfig : AnimConfig {
 		public SequenceControlType action = SequenceControlType.Stop;
 		public SequenceControlTarget targetScope = SequenceControlTarget.Self;
