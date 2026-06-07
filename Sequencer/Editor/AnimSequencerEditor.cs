@@ -159,7 +159,18 @@ namespace Sperlich.Sequencer.Editor {
 
 			var triggerWarning = new HelpBox("", HelpBoxMessageType.Warning) { style = { display = DisplayStyle.None, marginTop = 4 } };
 			void ValidateTrigger(TriggerType t) {
-				if (!IsSequencerUI() && (t == TriggerType.OnBecameInteractable || t == TriggerType.OnBecameNonInteractable)) { triggerWarning.text = "Interactable Triggers require a UI Selectable component."; triggerWarning.style.display = DisplayStyle.Flex; } else if (!IsSequencerUI() && (t == TriggerType.OnClick || t == TriggerType.OnPointerEnter || t == TriggerType.OnPointerExit || t == TriggerType.OnPointerDown || t == TriggerType.OnPointerUp)) { triggerWarning.text = "Pointer Events on World objects require a Collider and PhysicsRaycaster."; triggerWarning.style.display = DisplayStyle.Flex; } else triggerWarning.style.display = DisplayStyle.None;
+				if (!IsSequencerUI() && (t == TriggerType.OnBecameInteractable || t == TriggerType.OnBecameNonInteractable)) {
+					triggerWarning.text = "Interactable Triggers require a UI Selectable component.";
+					triggerWarning.style.display = DisplayStyle.Flex;
+				} else if (!IsSequencerUI() && (t == TriggerType.OnClick || t == TriggerType.OnPointerEnter || t == TriggerType.OnPointerExit || t == TriggerType.OnPointerDown || t == TriggerType.OnPointerUp)) {
+					triggerWarning.text = "Pointer Events on World objects require a Collider and PhysicsRaycaster.";
+					triggerWarning.style.display = DisplayStyle.Flex;
+				} else if ((t == TriggerType.OnSelect || t == TriggerType.OnDeselect) && _sequencer.GetComponent<UnityEngine.UI.Selectable>() == null) {
+					triggerWarning.text = "Select/Deselect Triggers require a UI Selectable component on this GameObject.";
+					triggerWarning.style.display = DisplayStyle.Flex;
+				} else {
+					triggerWarning.style.display = DisplayStyle.None;
+				}
 			}
 			ValidateTrigger(seq.trigger);
 			triggerField.RegisterValueChangeCallback(evt => {

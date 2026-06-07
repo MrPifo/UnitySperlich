@@ -8,7 +8,7 @@ using PrimeTween;
 using System.Linq;
 
 namespace Sperlich.Sequencer {
-	public partial class AnimSequencer : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler {
+	public partial class AnimSequencer : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler, ISelectHandler, IDeselectHandler {
 
 		public List<AnimSequence> sequences = new();
 
@@ -48,6 +48,16 @@ namespace Sperlich.Sequencer {
 				return;
 			}
 
+			// ==========================================
+			// STANDALONE FIX: Erkennen von Selection-Loss
+			// ==========================================
+			if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == gameObject) {
+				// Sequencer erkennt selbst, dass er deaktiviert wurde, während er selektiert war.
+				// Wir räumen das EventSystem auf, damit die Selektion global nicht "stecken" bleibt.
+				EventSystem.current.SetSelectedGameObject(null);
+			}
+
+			// Stoppe alle laufenden Tweens
 			foreach (var kvp in _activeSequences.ToList()) {
 				foreach (var s in kvp.Value.ToList()) {
 					if (s.isAlive) {
@@ -55,6 +65,9 @@ namespace Sperlich.Sequencer {
 					}
 				}
 			}
+
+			// Setze alle Visuals hart auf ihren Ursprung zurück
+			RestoreInitialState();
 
 			_activeSequences.Clear();
 			_pollingWaits.Clear();
@@ -184,6 +197,8 @@ namespace Sperlich.Sequencer {
 		public void OnPointerDown(PointerEventData e) { if (!_disabled) Play(TriggerType.OnPointerDown); }
 		public void OnPointerUp(PointerEventData e) { if (!_disabled) Play(TriggerType.OnPointerUp); }
 		public void OnPointerClick(PointerEventData e) { if (!_disabled) Play(TriggerType.OnClick); }
+		public void OnSelect(BaseEventData e) { if (!_disabled) Play(TriggerType.OnSelect); }
+		public void OnDeselect(BaseEventData e) { if (!_disabled) Play(TriggerType.OnDeselect); }
 
 		public void SetEnabled(bool value) {
 			_disabled = !value;
@@ -317,6 +332,52 @@ namespace Sperlich.Sequencer {
 			foreach (var tween in seq.activeTweens) {
 				if (tween.isAlive) {
 					tween.isPaused = paused;
+				}
+			}
+		}
+		public void RestoreInitialState() {
+			foreach (var seq in sequences) {
+				foreach (var step in seq.steps) {
+					if (!step.enabled || !step.isInitialized || step.resolvedTarget == null) continue;
+
+					// Setze Transforms und Farben auf die initial gecachten Werte zurück
+					switch (step.type) {
+						case AnimType.Scale:
+						case AnimType.PunchScale:
+							if (step.isUI && step.rectTarget != null) step.rectTarget.localScale = step.initialLocalScale;
+							else step.resolvedTarget.localScale = step.initialLocalScale;
+							break;
+						case AnimType.Slide:
+						case AnimType.Bounce:
+						case AnimType.ShakePosition:
+							if (step.isUI && step.rectTarget != null)
+								step.rectTarget.anchoredPosition = step.initialAnchoredPosition;
+							else
+								step.resolvedTarget.localPosition = step.initialLocalPosition;
+							break;
+						case AnimType.Rotate:
+						case AnimType.PunchRotate:
+						case AnimType.ShakeRotation:
+							step.resolvedTarget.localEulerAngles = step.initialLocalRotation;
+							break;
+						case AnimType.SizeDelta:
+							if (step.isUI && step.rectTarget != null)
+								step.rectTarget.sizeDelta = step.initialSizeDelta;
+							break;
+						case AnimType.ColorTint:
+							// Farben nutzen als Fallback den "From"-Wert, wenn nicht "FromCurrent" aktiv ist
+							if (step.cachedGraphic != null && !step.animateFromCurrent)
+								step.cachedGraphic.color = step.colorFrom;
+							break;
+						case AnimType.Fade:
+							if (step.cachedCanvasGroup != null && !step.animateFromCurrent)
+								step.cachedCanvasGroup.alpha = step.fadeFrom;
+							break;
+						case AnimType.FadeSpriteColor:
+							if (step.cachedSpriteRenderer != null && !step.animateFromCurrent)
+								step.cachedSpriteRenderer.color = step.colorFrom;
+							break;
+					}
 				}
 			}
 		}

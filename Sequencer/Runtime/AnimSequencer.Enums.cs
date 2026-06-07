@@ -9,7 +9,9 @@ namespace Sperlich.Sequencer {
 		OnPointerUp = 6,
 		Manual = 7,
 		OnBecameInteractable = 8,
-		OnBecameNonInteractable = 9
+		OnBecameNonInteractable = 9,
+		OnSelect = 10,
+		OnDeselect = 11
 	}
 
 	public enum StepMode {
