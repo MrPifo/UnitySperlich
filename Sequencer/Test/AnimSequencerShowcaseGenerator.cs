@@ -25,9 +25,9 @@ namespace Sperlich.Sequencer.Editor {
 		static readonly Color NeonOrange = new Color(0.95f, 0.60f, 0.20f);
 		static readonly Color NeonYellow = new Color(0.95f, 0.90f, 0.30f);
 
-		[MenuItem("Tools/AnimSequencer/Generate 70 Pro Cases")]
+		[MenuItem("Tools/AnimSequencer/Generate 72 Pro Cases")]
 		public static void GenerateShowcase() {
-			var canvasGO = new GameObject("AnimSequencer_70_ProShowcase");
+			var canvasGO = new GameObject("AnimSequencer_72_ProShowcase");
 			Undo.RegisterCreatedObjectUndo(canvasGO, "Create Showcase");
 
 			var canvas = canvasGO.AddComponent<Canvas>();
@@ -539,11 +539,29 @@ namespace Sperlich.Sequencer.Editor {
 			c70.AppendStep(new SetTextConfig { tmpTarget = tx70, text = "GO!" });
 			c70.AppendStep(new ColorTintConfig { target = t70, to = NeonGreen, duration = 0.2f });
 
+			// =========================================================================================
+			// GROUP 8: COLOR TINT MODES (71 - 72)
+			// =========================================================================================
+
+			// RGB mode: fades RGB color while preserving Image alpha
+			var c71 = Card(content, "71. ColorTint RGB Only", false, blank, out var t71, out var i71, out _, out _);
+			i71.color = new Color(NeonCyan.r, NeonCyan.g, NeonCyan.b, 0.4f); // semi-transparent to show alpha is preserved
+			c71.AppendStep(new ColorTintConfig { target = t71, from = i71.color, to = NeonPurple, duration = 0.5f, colorMode = ColorTintMode.RGB });
+			c71.AppendStep(new WaitConfig { duration = 0.3f });
+			c71.AppendStep(new ColorTintConfig { target = t71, to = NeonCyan, duration = 0.5f, colorMode = ColorTintMode.RGB });
+
+			// Alpha mode: fades only alpha on Image (no CanvasGroup needed)
+			var c72 = Card(content, "72. ColorTint Alpha Only", false, blank, out var t72, out var i72, out _, out _);
+			i72.color = NeonOrange;
+			c72.AppendStep(new ColorTintConfig { target = t72, from = new Color(0, 0, 0, 1f), to = new Color(0, 0, 0, 0f), duration = 0.5f, colorMode = ColorTintMode.Alpha });
+			c72.AppendStep(new WaitConfig { duration = 0.2f });
+			c72.AppendStep(new ColorTintConfig { target = t72, from = new Color(0, 0, 0, 0f), to = new Color(0, 0, 0, 1f), duration = 0.5f, colorMode = ColorTintMode.Alpha });
+
 			// Cleanup & Refresh
 			var allSequencers = canvasGO.GetComponentsInChildren<AnimSequencer>(true);
 			foreach (var seq in allSequencers) { EditorUtility.SetDirty(seq); }
 			Selection.activeGameObject = canvasGO;
-			Debug.Log("[AnimSequencer] V3 Pro Showcase created! 70 Hand-Crafted Cases cover 100% of the API.");
+			Debug.Log("[AnimSequencer] V3 Pro Showcase created! 72 Hand-Crafted Cases cover 100% of the API.");
 		}
 
 		static AnimSequence Card(GameObject parent, string titleText, bool isLoop, Sprite defSprite, out RectTransform visualTarget, out Image img, out CanvasGroup cg, out TextMeshProUGUI txt) {

@@ -224,11 +224,7 @@ namespace Sperlich.Sequencer {
 				return;
 			}
 
-			PrimeTween.Tween.Delay(delay).OnComplete(() => {
-				if (seq != null && seq.owner != null) {
-					seq.owner.PlaySequence(seq);
-				}
-			});
+			PrimeTween.Tween.Delay(seq.owner, delay, owner => owner.PlaySequence(seq));
 		}
 		public static void PlayDelayed(this AnimSequencer sequencer, string sequenceLabel, float delay) {
 			if (sequencer == null) {
@@ -236,11 +232,15 @@ namespace Sperlich.Sequencer {
 				return;
 			}
 
-			PrimeTween.Tween.Delay(delay).OnComplete(() => {
-				if (sequencer != null) {
-					sequencer.PlayByLabel(sequenceLabel);
-				}
-			});
+			PrimeTween.Tween.Delay(sequencer, delay, t => t.PlayByLabel(sequenceLabel));
+		}
+		public static void PlayDelayed(this AnimSequencer sequencer, TriggerType trigger, float delay) {
+			if (sequencer == null) {
+				Debug.LogError("[AnimSequencer] Cannot PlayDelayed. Sequencer is null.");
+				return;
+			}
+
+			PrimeTween.Tween.Delay(sequencer, delay, t => t.Play(trigger));
 		}
 		#endregion
 
@@ -1007,6 +1007,24 @@ namespace Sperlich.Sequencer {
 		}
 		public static AnimSequencer SetPunchScale3D(this AnimSequencer sequencer, string seqLabel, string stepTag, Vector3 punch) {
 			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetPunchScale3D(stepTag, punch));
+		}
+		#endregion
+
+		#region ColorTintMode
+		public static AnimSequencer.AnimSequence SetColorTintMode(this AnimSequencer.AnimSequence seq, int index, ColorTintMode mode) {
+			ApplyToStep(seq, index, s => s.colorTintMode = mode, "ColorTintMode");
+			return seq;
+		}
+		public static AnimSequencer.AnimSequence SetColorTintMode(this AnimSequencer.AnimSequence seq, string tag, ColorTintMode mode) {
+			int index = -1;
+			if (seq != null) index = seq.FindStepIndex(tag);
+			return seq.SetColorTintMode(index, mode);
+		}
+		public static AnimSequencer SetColorTintMode(this AnimSequencer sequencer, string seqLabel, int stepIndex, ColorTintMode mode) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetColorTintMode(stepIndex, mode));
+		}
+		public static AnimSequencer SetColorTintMode(this AnimSequencer sequencer, string seqLabel, string stepTag, ColorTintMode mode) {
+			return ApplyToSequence(sequencer, seqLabel, seq => seq.SetColorTintMode(stepTag, mode));
 		}
 		#endregion
 

@@ -218,6 +218,13 @@ namespace Sperlich.Sequencer {
 				}
 			}
 		}
+		public void Play(TriggerType trigger, float delay) {
+			if (delay <= 0f) {
+				Play(trigger);
+				return;
+			}
+			PrimeTween.Tween.Delay(this, delay, t => t.Play(trigger));
+		}
 		public void PlayByLabel(string sequenceLabel) {
 			if (!gameObject.activeInHierarchy) {
 				Debug.LogWarning($"[AnimSequencer] Cannot play sequence '{sequenceLabel}' because the GameObject '{gameObject.name}' is disabled. Please enable it first.");
@@ -230,6 +237,13 @@ namespace Sperlich.Sequencer {
 					return;
 				}
 			}
+		}
+		public void PlayByLabel(string sequenceLabel, float delay) {
+			if (delay <= 0f) {
+				PlayByLabel(sequenceLabel);
+				return;
+			}
+			PrimeTween.Tween.Delay(this, delay, t => t.PlayByLabel(sequenceLabel));
 		}
 
 		public void Pause(string sequenceLabel) {
@@ -368,9 +382,13 @@ namespace Sperlich.Sequencer {
 								step.rectTarget.sizeDelta = step.initialSizeDelta;
 							break;
 						case AnimType.ColorTint:
-							// Farben nutzen als Fallback den "From"-Wert, wenn nicht "FromCurrent" aktiv ist
-							if (step.cachedGraphic != null && !step.animateFromCurrent)
-								step.cachedGraphic.color = step.colorFrom;
+							if (step.cachedGraphic != null && !step.animateFromCurrent) {
+								switch (step.colorTintMode) {
+									case ColorTintMode.RGBA: step.cachedGraphic.color = step.colorFrom; break;
+									case ColorTintMode.RGB: { Color c = step.cachedGraphic.color; step.cachedGraphic.color = new Color(step.colorFrom.r, step.colorFrom.g, step.colorFrom.b, c.a); break; }
+									case ColorTintMode.Alpha: { Color c = step.cachedGraphic.color; step.cachedGraphic.color = new Color(c.r, c.g, c.b, step.colorFrom.a); break; }
+								}
+							}
 							break;
 						case AnimType.Fade:
 							if (step.cachedCanvasGroup != null && !step.animateFromCurrent)
@@ -813,7 +831,11 @@ namespace Sperlich.Sequencer {
 						break;
 					case AnimType.ColorTint:
 						if (step.cachedGraphic != null) {
-							step.cachedGraphic.color = step.colorFrom;
+							switch (step.colorTintMode) {
+								case ColorTintMode.RGBA: step.cachedGraphic.color = step.colorFrom; break;
+								case ColorTintMode.RGB: { Color c = step.cachedGraphic.color; step.cachedGraphic.color = new Color(step.colorFrom.r, step.colorFrom.g, step.colorFrom.b, c.a); break; }
+								case ColorTintMode.Alpha: { Color c = step.cachedGraphic.color; step.cachedGraphic.color = new Color(c.r, c.g, c.b, step.colorFrom.a); break; }
+							}
 						}
 						break;
 					case AnimType.FadeSpriteColor:
@@ -1204,10 +1226,26 @@ namespace Sperlich.Sequencer {
 					return Tween.ShakeLocalRotation(t, new ShakeSettings(step.shakeStrength, Mathf.Max(step.duration, 0.001f), step.shakeFrequency, enableFalloff: step.shakeFalloff, startDelay: step.delay + absoluteDelay));
 				case AnimType.ColorTint:
 					if (step.cachedGraphic != null) {
-						if (step.animateFromCurrent) {
-							return Tween.Color(step.cachedGraphic, step.colorTo, settings);
-						} else {
-							return Tween.Color(step.cachedGraphic, new TweenSettings<Color>(step.colorFrom, step.colorTo, settings));
+						switch (step.colorTintMode) {
+							case ColorTintMode.RGBA:
+								if (step.animateFromCurrent)
+									return Tween.Color(step.cachedGraphic, step.colorTo, settings);
+								else
+									return Tween.Color(step.cachedGraphic, new TweenSettings<Color>(step.colorFrom, step.colorTo, settings));
+							case ColorTintMode.RGB: {
+								Color cur = step.cachedGraphic.color;
+								float a = step.animateFromCurrent ? cur.a : step.colorFrom.a;
+								Color from = step.animateFromCurrent ? new Color(cur.r, cur.g, cur.b, a) : new Color(step.colorFrom.r, step.colorFrom.g, step.colorFrom.b, a);
+								Color to = new Color(step.colorTo.r, step.colorTo.g, step.colorTo.b, a);
+								return Tween.Color(step.cachedGraphic, new TweenSettings<Color>(from, to, settings));
+							}
+							case ColorTintMode.Alpha: {
+								Color cur = step.cachedGraphic.color;
+								float fromA = step.animateFromCurrent ? cur.a : step.colorFrom.a;
+								Color from = new Color(cur.r, cur.g, cur.b, fromA);
+								Color to   = new Color(cur.r, cur.g, cur.b, step.colorTo.a);
+								return Tween.Color(step.cachedGraphic, new TweenSettings<Color>(from, to, settings));
+							}
 						}
 					}
 					break;
@@ -1399,6 +1437,7 @@ namespace Sperlich.Sequencer {
 			public Color colorFrom = Color.white;
 			public Color colorTo = Color.white;
 			public ColorTargetType colorTarget = ColorTargetType.Image;
+			public ColorTintMode colorTintMode = ColorTintMode.RGBA;
 			public TransformSubType transformSubType = TransformSubType.LocalPosition;
 			public Vector3 setTransformValue = Vector3.zero;
 			public string setTextValue = "";

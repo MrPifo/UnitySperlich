@@ -119,6 +119,9 @@ namespace Sperlich.Core {
 		public static IEnumerable<T> Shuffle<T>(this IEnumerable<T> source) {
 			return source.OrderBy(x => Guid.NewGuid());
 		}
+		public static void SetActive(this Component comp, bool state) {
+			comp.gameObject.SetActive(state);
+		}
 		public static void Show(this MonoBehaviour mono) {
 			mono.gameObject.SetActive(true);
 		}

@@ -554,7 +554,36 @@ namespace Sperlich.Sequencer.Editor {
 					break;
 				case AnimType.ShakePosition: Add(sp.FindPropertyRelative("shakeStrength"), "Strength"); Add(sp.FindPropertyRelative("shakeFrequency"), "Frequency"); var (srPill, _) = MakeToggleField(sp.FindPropertyRelative("shakeFalloff"), "Falloff", () => step.shakeFalloff); c.Add(srPill); break;
 				case AnimType.ShakeRotation: Add(sp.FindPropertyRelative("shakeStrength"), "Strength"); Add(sp.FindPropertyRelative("shakeFrequency"), "Frequency"); var (srotPill, _) = MakeToggleField(sp.FindPropertyRelative("shakeFalloff"), "Falloff", () => step.shakeFalloff); c.Add(srotPill); break;
-				case AnimType.ColorTint: Add(sp.FindPropertyRelative("colorTarget"), "Color Target"); Add(sp.FindPropertyRelative("colorFrom"), "From", true); Add(sp.FindPropertyRelative("colorTo"), "To"); break;
+				case AnimType.ColorTint: {
+					var modeProp = sp.FindPropertyRelative("colorTintMode");
+					var modeField = new PropertyField(modeProp, "Mode"); modeField.Bind(serializedObject); c.Add(modeField);
+
+					var colorTargetF = new PropertyField(sp.FindPropertyRelative("colorTarget"), "Color Target"); colorTargetF.Bind(serializedObject); c.Add(colorTargetF);
+
+					var fromColorF = new PropertyField(sp.FindPropertyRelative("colorFrom"), "From"); fromColorF.Bind(serializedObject); fromColorF.style.display = fc ? DisplayStyle.None : DisplayStyle.Flex; c.Add(fromColorF);
+					var toColorF   = new PropertyField(sp.FindPropertyRelative("colorTo"),   "To");   toColorF.Bind(serializedObject); c.Add(toColorF);
+
+					var fromAlphaF = new PropertyField(sp.FindPropertyRelative("colorFrom").FindPropertyRelative("a"), "From Alpha"); fromAlphaF.Bind(serializedObject); fromAlphaF.style.display = DisplayStyle.None; c.Add(fromAlphaF);
+					var toAlphaF   = new PropertyField(sp.FindPropertyRelative("colorTo").FindPropertyRelative("a"),   "To Alpha");   toAlphaF.Bind(serializedObject);   toAlphaF.style.display = DisplayStyle.None;   c.Add(toAlphaF);
+
+					void RefreshColorTintMode() {
+						bool isAlpha = step.colorTintMode == ColorTintMode.Alpha;
+						colorTargetF.style.display = isAlpha ? DisplayStyle.None : DisplayStyle.Flex;
+						toColorF.style.display     = isAlpha ? DisplayStyle.None : DisplayStyle.Flex;
+						toAlphaF.style.display     = isAlpha ? DisplayStyle.Flex : DisplayStyle.None;
+						if (isAlpha) {
+							fromColorF.name = ""; fromColorF.style.display = DisplayStyle.None;
+							fromAlphaF.name = "fromField"; fromAlphaF.style.display = step.animateFromCurrent ? DisplayStyle.None : DisplayStyle.Flex;
+						} else {
+							fromAlphaF.name = ""; fromAlphaF.style.display = DisplayStyle.None;
+							fromColorF.name = "fromField"; fromColorF.style.display = step.animateFromCurrent ? DisplayStyle.None : DisplayStyle.Flex;
+						}
+					}
+
+					RefreshColorTintMode();
+					modeField.RegisterValueChangeCallback(_ => RefreshColorTintMode());
+					break;
+				}
 				case AnimType.FadeSpriteColor: Add(sp.FindPropertyRelative("spriteTarget"), "Sprite Target"); Add(sp.FindPropertyRelative("colorFrom"), "From", true); Add(sp.FindPropertyRelative("colorTo"), "To"); break;
 				case AnimType.TypeWriter: Add(sp.FindPropertyRelative("tmpTarget"), "TMP Target"); Add(sp.FindPropertyRelative("setTextValue"), "Text String"); Add(sp.FindPropertyRelative("typeWriterCharsPerSecond"), "Chars Per Second"); break;
 				case AnimType.TextCounter: BuildTextCounterFields(c, sp, step, seqIndex, stepIndex); break;
@@ -876,7 +905,7 @@ namespace Sperlich.Sequencer.Editor {
 				case AnimType.PunchScale:    return "Punches the scale and springs back to rest.";
 				case AnimType.ShakePosition: return "Shakes the local position with configurable strength and frequency.";
 				case AnimType.ShakeRotation: return "Shakes the local rotation with configurable strength and frequency.";
-				case AnimType.ColorTint:     return "Tweens a Graphic color (Image or TMP_Text).";
+				case AnimType.ColorTint:     return "Tweens a Graphic color (Image or TMP_Text). Modes: RGBA (full color), RGB (color only, alpha preserved), Alpha (alpha only, color preserved).";
 				case AnimType.FadeSpriteColor: return "Tweens a SpriteRenderer color.";
 				case AnimType.MaterialProperty: return "Tweens a float or color property on a Material.";
 				case AnimType.TypeWriter:    return "Reveals TMP_Text character by character at a given speed.";

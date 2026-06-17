@@ -279,8 +279,9 @@ namespace Sperlich.Sequencer {
 		public Color from = Color.white;
 		public Color to = Color.white;
 		public ColorTargetType colorTarget = ColorTargetType.Image;
+		public ColorTintMode colorMode = ColorTintMode.RGBA;
 		public override AnimType GetAnimType() { return AnimType.ColorTint; }
-		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.colorFrom = from; s.colorTo = to; s.colorTarget = colorTarget; }
+		public override void ApplyTo(AnimSequencer.AnimStep s) { base.ApplyTo(s); s.colorFrom = from; s.colorTo = to; s.colorTarget = colorTarget; s.colorTintMode = colorMode; }
 	}
 
 	public class FadeSpriteColorConfig : TweenConfig {

@@ -30,8 +30,11 @@ public class UISystem : MonoBehaviour {
 	private float navCooldown;
 	private bool isDisabled;
 
-	public static bool HasSelection => EventSystem.currentSelectedGameObject != null;
-	public static bool PreventBackgroundDeselect { get => Instance.inputModule != null && !Instance.inputModule.deselectIfBackgroundClicked; set => Instance.inputModule.deselectIfBackgroundClicked = !value; }
+	public static bool HasSelection => EventSystem != null && EventSystem.currentSelectedGameObject != null;
+	public static bool PreventBackgroundDeselect {
+		get => Instance != null && Instance.inputModule != null && !Instance.inputModule.deselectIfBackgroundClicked;
+		set { if (Instance != null && Instance.inputModule != null) Instance.inputModule.deselectIfBackgroundClicked = !value; }
+	}
 	public static Selectable Selected => HasSelection ? EventSystem.currentSelectedGameObject.GetComponent<Selectable>() : null;
 	public static GameObject SelectedGameObject => HasSelection ? EventSystem.currentSelectedGameObject : null;
 
@@ -55,7 +58,7 @@ public class UISystem : MonoBehaviour {
 		}
 	}
 	public static SInputModule InputModule => Instance.inputModule;
-	public static EventSystem EventSystem => Instance.eventSystem;
+	public static EventSystem EventSystem => Instance != null ? Instance.eventSystem : null;
 	public static GlyphProvider GlyphProvider => Instance.glyphProvider;
 	#endregion
 
@@ -65,11 +68,13 @@ public class UISystem : MonoBehaviour {
 			return;
 		}
 
+		_instance = this;
 		FetchComponents();
 	}
 	void Update() {
 		if (CooldownActive) {
-			navCooldown = Mathf.Clamp(navCooldown - Time.deltaTime, 0f, float.MaxValue);
+			// Unscaled, damit ein UI-Cooldown nicht einfriert wenn Time.timeScale == 0 (z.B. Pause/Popup).
+			navCooldown = Mathf.Max(navCooldown - Time.unscaledDeltaTime, 0f);
 
 			if (navCooldown == 0) {
 				Instance.inputModule.enabled = true;
@@ -98,27 +103,24 @@ public class UISystem : MonoBehaviour {
 	public static void TriggerCooldown(float cooldown) {
 		Instance.navCooldown = cooldown;
 
-		// Während des Cooldowns komplette UI-Interaktion einfrieren
+		// Wï¿½hrend des Cooldowns komplette UI-Interaktion einfrieren
 		Instance.inputModule.enabled = false;
 		Instance.eventSystem.enabled = false;
 		Instance.isDisabled = true;
 	}
 	public static void Select(Component comp) => Select(comp.gameObject);
 	public static void Select(GameObject obj) {
-		if (IsInactive) return;
+		if (IsInactive || Instance == null) return;
 
-		GameObject currentSelectedObj = Instance.eventSystem.currentSelectedGameObject;
 		Instance.eventSystem.SetSelectedGameObject(obj);
-
-		//if(currentSelectedObj.TryGetComponent(out Selectable prevSelect)) {
-			//prevSelect.OnDeselect(null);
-		//}
 	}
 
 	public static void SetFirstSelectedObject(GameObject obj) {
 		Instance.eventSystem.firstSelectedGameObject = obj;
 	}
 	public static void ClearSelection(bool clearAll = false) {
+		if (Instance == null) return;
+
 		Instance.eventSystem.SetSelectedGameObject(null);
 
 		if (clearAll) {
@@ -138,14 +140,16 @@ public class UISystem : MonoBehaviour {
 		CursorDisabled = true;
 	}
 	public static T GetSelection<T>() where T : Selectable {
-		if (Instance.eventSystem.currentSelectedGameObject == null || Instance.eventSystem.currentSelectedGameObject.TryGetComponent(out T element) == false) {
+		var selected = SelectedGameObject;
+		if (selected == null || selected.TryGetComponent(out T element) == false) {
 			return null;
 		}
 
 		return element;
 	}
 	public static bool TryGetSelection<T>(out T result) where T : Selectable {
-		if (Instance.eventSystem.currentSelectedGameObject == null || Instance.eventSystem.currentSelectedGameObject.TryGetComponent(out result) == false) {
+		var selected = SelectedGameObject;
+		if (selected == null || selected.TryGetComponent(out result) == false) {
 			result = null;
 			return false;
 		}

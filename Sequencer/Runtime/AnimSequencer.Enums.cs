@@ -85,6 +85,7 @@ namespace Sperlich.Sequencer {
 
 	public enum WaitMethod { Seconds = 0, Frames = 1 }
 	public enum ColorTargetType { Image = 0, Text = 1 }
+	public enum ColorTintMode { RGBA = 0, RGB = 1, Alpha = 2 }
 	public enum TransformSubType { LocalPosition = 0, LocalRotation = 1, LocalScale = 2 }
 	public enum OptionalBool { Unchanged = 0, True = 1, False = 2 }
 }
