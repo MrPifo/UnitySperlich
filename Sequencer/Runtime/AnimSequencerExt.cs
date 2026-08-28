@@ -41,6 +41,26 @@ namespace Sperlich.Sequencer {
 		}
 		#endregion
 
+		#region GameObject Convenience
+		/// <summary>
+		/// Drop-in-Ersatz für gameObject.SetActive(false): spielt – falls vorhanden –
+		/// die OnDisable-Exit-Animation des AnimSequencers ab und deaktiviert danach.
+		/// Ohne AnimSequencer (oder ohne OnDisable-Sequence) verhält es sich wie ein
+		/// normales SetActive(false). Sicher gegen Pool-Recycling / verschachtelte Disables.
+		/// </summary>
+		public static void DisableAnimated(this GameObject go) {
+			if (go == null) {
+				return;
+			}
+			var sequencer = go.GetComponent<AnimSequencer>();
+			if (sequencer == null) {
+				go.SetActive(false);
+				return;
+			}
+			sequencer.Disable();
+		}
+		#endregion
+
 		#region Playback & Lifecycle
 		public static void Play(this AnimSequencer.AnimSequence seq) {
 			if (seq == null) {

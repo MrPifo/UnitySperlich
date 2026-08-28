@@ -94,6 +94,7 @@ namespace Sperlich.Sequencer.Editor {
 
 		void BuildUI(VisualElement root) {
 			root.Clear();
+			if (_sequencer != null) serializedObject.Update();
 			root.Add(MakeHeader());
 			root.Add(MakeCopyPasteRow(root));
 			for (int i = 0; i < _sequencer.sequences.Count; i++) root.Add(BuildSequenceElement(i, root));
@@ -126,7 +127,7 @@ namespace Sperlich.Sequencer.Editor {
 			ApplyNeonButtonStyle(btn, true); return btn;
 		}
 
-		SerializedProperty GetSeqProp(int seqIndex) { serializedObject.Update(); return serializedObject.FindProperty("sequences").GetArrayElementAtIndex(seqIndex); }
+		SerializedProperty GetSeqProp(int seqIndex) { return serializedObject.FindProperty("sequences").GetArrayElementAtIndex(seqIndex); }
 		SerializedProperty GetStepProp(int seqIndex, int stepIndex) { return GetSeqProp(seqIndex).FindPropertyRelative("steps").GetArrayElementAtIndex(stepIndex); }
 
 		VisualElement BuildSequenceElement(int seqIndex, VisualElement root) {
@@ -380,12 +381,16 @@ namespace Sperlich.Sequencer.Editor {
 			var bg = new VisualElement { style = { height = 3, backgroundColor = new StyleColor(new Color(0f, 0f, 0f, 0f)) } };
 			var fill = new VisualElement { style = { height = 3, width = Length.Percent(0), backgroundColor = new StyleColor(new Color(typeColor.r, typeColor.g, typeColor.b, 0f)) } }; bg.Add(fill);
 			int cs = seqIndex; int ci = stepIndex;
+			bool lastActive = false; float lastWidth = -1f;
 			bg.schedule.Execute(() => {
 				if (_sequencer == null) return;
 				bool active = _sequencer.editorPlayingSeqIndex == cs && _sequencer.editorStepProgress != null && ci < _sequencer.editorStepProgress.Length;
+				float width = active ? _sequencer.editorStepProgress[ci] * 100f : 0f;
+				if (active == lastActive && Mathf.Abs(width - lastWidth) < 0.5f) return;
+				lastActive = active; lastWidth = width;
 				fill.style.backgroundColor = new StyleColor(new Color(typeColor.r, typeColor.g, typeColor.b, active ? 1f : 0f));
-				fill.style.width = Length.Percent(active ? _sequencer.editorStepProgress[ci] * 100f : 0f);
-			}).Every(16); return bg;
+				fill.style.width = Length.Percent(width);
+			}).Every(50); return bg;
 		}
 
 		List<string> GetValidAnimTypes(bool isUI) {
@@ -426,7 +431,7 @@ namespace Sperlich.Sequencer.Editor {
 				if (step == null) return;
 				bool isUI = GetCurrentIsUI(); bool isCompatible = true; string msg = ""; HelpBoxMessageType msgType = HelpBoxMessageType.Error;
 
-				if (!isUI && (step.type == AnimType.Fade || step.type == AnimType.ColorTint || step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || step.type == AnimType.FillAmount || step.type == AnimType.SizeDelta || (step.type == AnimType.SetProperty && (step.setPropertyType == SetPropertyType.Fade || step.setPropertyType == SetPropertyType.Color || step.setPropertyType == SetPropertyType.Text || step.setPropertyType == SetPropertyType.Image || step.setPropertyType == SetPropertyType.CanvasGroupState || step.setPropertyType == SetPropertyType.SizeDelta || step.setPropertyType == SetPropertyType.Pivot)))) { isCompatible = false; msg = $"Type '{step.type}' is strictly for UI elements."; } else if (isUI && (step.type == AnimType.FadeSpriteColor || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Sprite))) { isCompatible = false; msg = $"Type '{step.type}' is for World 2D Sprites only."; }
+				if (!isUI && (step.type == AnimType.Fade || step.type == AnimType.ColorTint || step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || step.type == AnimType.FillAmount || step.type == AnimType.SizeDelta || (step.type == AnimType.SetProperty && (step.setPropertyType == SetPropertyType.Fade || step.setPropertyType == SetPropertyType.Color || step.setPropertyType == SetPropertyType.Text || step.setPropertyType == SetPropertyType.CanvasGroupState || step.setPropertyType == SetPropertyType.SizeDelta || step.setPropertyType == SetPropertyType.Pivot)))) { isCompatible = false; msg = $"Type '{step.type}' is strictly for UI elements."; } else if (isUI && step.type == AnimType.FadeSpriteColor) { isCompatible = false; msg = $"Type '{step.type}' is for World 2D Sprites only."; }
 
 				if (isCompatible && step.type == AnimType.Repeat) {
 					if (!_sequencer.sequences[seqIndex].steps.Exists(s => s.type == AnimType.Anchor && s.anchorLabel == step.repeatAnchorLabel)) { isCompatible = false; msg = $"Target Anchor '#{step.repeatAnchorLabel}' does not exist."; }
@@ -436,7 +441,7 @@ namespace Sperlich.Sequencer.Editor {
 					Transform effTarget = (stepProp.FindPropertyRelative("target").objectReferenceValue as Transform) ?? _sequencer.transform;
 					bool missing = false; string comp = "";
 					if (effTarget != null) {
-						if ((step.type == AnimType.Fade || (step.type == AnimType.SetProperty && (step.setPropertyType == SetPropertyType.Fade || step.setPropertyType == SetPropertyType.CanvasGroupState))) && isUI && effTarget.GetComponent<CanvasGroup>() == null) { missing = true; comp = "CanvasGroup"; } else if ((step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Text)) && stepProp.FindPropertyRelative("tmpTarget").objectReferenceValue == null && effTarget.GetComponent<TMP_Text>() == null) { missing = true; comp = "TMP_Text"; } else if ((step.type == AnimType.FadeSpriteColor || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Sprite)) && stepProp.FindPropertyRelative("spriteTarget").objectReferenceValue == null && effTarget.GetComponent<SpriteRenderer>() == null) { missing = true; comp = "SpriteRenderer"; } else if ((step.type == AnimType.FillAmount || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Image)) && stepProp.FindPropertyRelative("imageTarget").objectReferenceValue == null && effTarget.GetComponent<Image>() == null) { missing = true; comp = "Image"; } else if ((step.type == AnimType.ColorTint || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Color)) && effTarget.GetComponent<UnityEngine.UI.Graphic>() == null) { missing = true; comp = "Graphic (Image or Text)"; } else if ((step.type == AnimType.PlayAudio || step.type == AnimType.FadeAudio) && stepProp.FindPropertyRelative("audioTarget").objectReferenceValue == null && effTarget.GetComponent<AudioSource>() == null) { missing = true; comp = "AudioSource"; } else if ((step.type == AnimType.MaterialProperty || step.type == AnimType.SetMaterialProperty) &&
+						if ((step.type == AnimType.Fade || (step.type == AnimType.SetProperty && (step.setPropertyType == SetPropertyType.Fade || step.setPropertyType == SetPropertyType.CanvasGroupState))) && isUI && effTarget.GetComponent<CanvasGroup>() == null) { missing = true; comp = "CanvasGroup"; } else if ((step.type == AnimType.TypeWriter || step.type == AnimType.TextCounter || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Text)) && stepProp.FindPropertyRelative("tmpTarget").objectReferenceValue == null && effTarget.GetComponent<TMP_Text>() == null) { missing = true; comp = "TMP_Text"; } else if (step.type == AnimType.FadeSpriteColor && stepProp.FindPropertyRelative("spriteTarget").objectReferenceValue == null && effTarget.GetComponent<SpriteRenderer>() == null) { missing = true; comp = "SpriteRenderer"; } else if (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Sprite && stepProp.FindPropertyRelative("spriteTarget").objectReferenceValue == null) { missing = true; comp = "SpriteRenderer"; } else if (step.type == AnimType.FillAmount && stepProp.FindPropertyRelative("imageTarget").objectReferenceValue == null && effTarget.GetComponent<UnityEngine.UI.Image>() == null) { missing = true; comp = "Image"; } else if (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Image && stepProp.FindPropertyRelative("imageTarget").objectReferenceValue == null) { missing = true; comp = "Image"; } else if ((step.type == AnimType.ColorTint || (step.type == AnimType.SetProperty && step.setPropertyType == SetPropertyType.Color)) && effTarget.GetComponent<UnityEngine.UI.Graphic>() == null) { missing = true; comp = "Graphic (Image or Text)"; } else if ((step.type == AnimType.PlayAudio || step.type == AnimType.FadeAudio) && stepProp.FindPropertyRelative("audioTarget").objectReferenceValue == null && effTarget.GetComponent<AudioSource>() == null) { missing = true; comp = "AudioSource"; } else if ((step.type == AnimType.MaterialProperty || step.type == AnimType.SetMaterialProperty) &&
 																																																																																																																																																																																																																																																																																																																																																																																																																																																			stepProp.FindPropertyRelative("materialTarget").objectReferenceValue == null &&
 																																																																																																																																																																																																																																																																																																																																																																																																																																																			stepProp.FindPropertyRelative("rendererTarget").objectReferenceValue == null &&
 																																																																																																																																																																																																																																																																																																																																																																																																																																																			stepProp.FindPropertyRelative("graphicTarget").objectReferenceValue == null &&
@@ -470,7 +475,7 @@ namespace Sperlich.Sequencer.Editor {
 					infoLabel.text = BuildStepTypeInfo(step); colorBar.parent.style.backgroundColor = new StyleColor(step.type == AnimType.Anchor ? new Color(ColorAnchor.r, ColorAnchor.g, ColorAnchor.b, 0.4f) : BgStep);
 					modeEl.style.display = IsModeHidden(step.type) ? DisplayStyle.None : DisplayStyle.Flex;
 					onTypeChanged?.Invoke();
-					RefreshStepBodyVisibility(body, step); BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body); UpdateContextWarning();
+					RefreshStepBodyVisibility(body, step); BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body, UpdateContextWarning); UpdateContextWarning();
 				}
 			});
 
@@ -482,11 +487,11 @@ namespace Sperlich.Sequencer.Editor {
 			var targetField = MakeTargetField(stepProp.FindPropertyRelative("target"), "Target Transform"); targetField.name = "targetField"; targetField.RegisterValueChangeCallback(_ => {
 				bool newIsUI = GetCurrentIsUI(); var newChoices = GetValidAnimTypes(newIsUI); string typeStr = step.type.ToString();
 				if (!newChoices.Contains(typeStr)) newChoices.Add(typeStr); typeDropdown.choices = newChoices; typeDropdown.value = typeStr;
-				UpdateContextWarning(); BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body);
+				UpdateContextWarning(); BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body, UpdateContextWarning);
 			});
 
 			body.Add(durationField); body.Add(delayField); body.Add(easeField); body.Add(customCurveField); body.Add(fromCurrentField); body.Add(targetField); body.Add(Spacer(4));
-			BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body); body.Add(typeFieldsContainer);
+			BuildTypeFields(typeFieldsContainer, subTypeContainer, seqIndex, stepIndex, infoLabel, body, UpdateContextWarning); body.Add(typeFieldsContainer);
 			UpdateContextWarning(); body.Add(Spacer(4)); body.Add(contextWarning); RefreshStepBodyVisibility(body, step);
 
 			body.schedule.Execute(() => {
@@ -494,7 +499,6 @@ namespace Sperlich.Sequencer.Editor {
 				string newInfo = BuildStepTypeInfo(step); if (infoLabel.text != newInfo) infoLabel.text = newInfo;
 				string newMode = step.mode == StepMode.Sequential ? "SEQ" : "PAR";
 				if (modeEl.text != newMode) { modeEl.text = newMode; modeEl.style.color = new StyleColor(step.mode == StepMode.Sequential ? ColorSeq : ColorPar); }
-				UpdateContextWarning();
 			}).Every(100);
 		}
 
@@ -511,13 +515,13 @@ namespace Sperlich.Sequencer.Editor {
 			relPill.onValueChanged += () => { RefreshStepBodyVisibility(body, step); infoLabel.text = BuildStepTypeInfo(step); }; return relRow;
 		}
 
-		void BuildTypeFields(VisualElement c, VisualElement subTypeContainer, int seqIndex, int stepIndex, Label infoLabel, VisualElement body) {
+		void BuildTypeFields(VisualElement c, VisualElement subTypeContainer, int seqIndex, int stepIndex, Label infoLabel, VisualElement body, System.Action onWarningRefresh = null) {
 			c.Clear(); subTypeContainer.Clear(); var step = _sequencer.sequences[seqIndex].steps[stepIndex]; var sp = GetStepProp(seqIndex, stepIndex); bool fc = step.animateFromCurrent; bool isUI = IsStepUI(step);
 
 			void Add(SerializedProperty prop, string label, bool isFromField = false, bool isToField = false, VisualElement targetContainer = null) {
 				bool isRef = prop.propertyType == SerializedPropertyType.ObjectReference; string initLabel = isRef && prop.objectReferenceValue == null ? $"{label} [Self]" : label;
 				var f = new PropertyField(prop, initLabel); f.Bind(serializedObject);
-				if (isRef) f.RegisterValueChangeCallback(evt => f.label = evt.changedProperty.objectReferenceValue == null ? $"{label} [Self]" : label);
+				if (isRef) f.RegisterValueChangeCallback(evt => { f.label = evt.changedProperty.objectReferenceValue == null ? $"{label} [Self]" : label; onWarningRefresh?.Invoke(); });
 				if (isFromField) { f.name = "fromField"; f.style.display = fc ? DisplayStyle.None : DisplayStyle.Flex; }
 				if (isToField) f.name = "toField";
 				(targetContainer ?? c).Add(f);
@@ -617,6 +621,7 @@ namespace Sperlich.Sequencer.Editor {
 						step.setPropertyType = (SetPropertyType)evt.changedProperty.intValue;
 						infoLabel.text = BuildStepTypeInfo(step);
 						setDyn.schedule.Execute(RebuildSet);
+						setDyn.schedule.Execute(() => onWarningRefresh?.Invoke());
 					});
 					RebuildSet();
 					break;
@@ -729,10 +734,22 @@ namespace Sperlich.Sequencer.Editor {
 					bool currentPillVisual = step.waitUntilValue; waitRow.schedule.Execute(() => { if (!Application.isPlaying || step == null) return; bool isMet = step.waitUntilValue; if (step.waitConditionLambda != null) isMet = isMet || step.waitConditionLambda.Invoke(); if (currentPillVisual != isMet) { currentPillVisual = isMet; waitPill.SetValue(isMet); } }).Every(50); break;
 				case AnimType.Wait:
 					var waitMethodField = new PropertyField(sp.FindPropertyRelative("waitMethod"), "Wait Method"); waitMethodField.Bind(serializedObject); c.Add(waitMethodField);
+					var (randomRangeRow, randomRangePill) = MakeToggleField(sp.FindPropertyRelative("waitRandomRange"), "Random Range", () => step.waitRandomRange); c.Add(randomRangeRow);
 					var durField = new PropertyField(sp.FindPropertyRelative("duration"), "Duration (Seconds)"); durField.Bind(serializedObject); c.Add(durField);
+					var randomRangeField = new PropertyField(sp.FindPropertyRelative("waitRandomRangeMinMax"), "Range (Min / Max)"); randomRangeField.Bind(serializedObject); c.Add(randomRangeField);
 					var framesField = new PropertyField(sp.FindPropertyRelative("waitFrames"), "Frames"); framesField.Bind(serializedObject); c.Add(framesField);
-					void RefreshWait() { bool isFrames = step.waitMethod == WaitMethod.Frames; durField.style.display = isFrames ? DisplayStyle.None : DisplayStyle.Flex; framesField.style.display = isFrames ? DisplayStyle.Flex : DisplayStyle.None; }
-					RefreshWait(); waitMethodField.RegisterValueChangeCallback(evt => { step.waitMethod = (WaitMethod)evt.changedProperty.intValue; RefreshWait(); infoLabel.text = BuildStepTypeInfo(step); }); break;
+					void RefreshWait() {
+						bool isFrames = step.waitMethod == WaitMethod.Frames;
+						bool isRandom = step.waitRandomRange && !isFrames;
+						durField.style.display = (!isFrames && !isRandom) ? DisplayStyle.Flex : DisplayStyle.None;
+						framesField.style.display = isFrames ? DisplayStyle.Flex : DisplayStyle.None;
+						randomRangeRow.style.display = isFrames ? DisplayStyle.None : DisplayStyle.Flex;
+						randomRangeField.style.display = isRandom ? DisplayStyle.Flex : DisplayStyle.None;
+					}
+					RefreshWait();
+					waitMethodField.RegisterValueChangeCallback(evt => { step.waitMethod = (WaitMethod)evt.changedProperty.intValue; RefreshWait(); infoLabel.text = BuildStepTypeInfo(step); });
+					randomRangePill.onValueChanged += () => { RefreshWait(); infoLabel.text = BuildStepTypeInfo(step); };
+					break;
 				case AnimType.ControlSequence:
 					var ctrlTypeField = new PropertyField(sp.FindPropertyRelative("sequenceControlType"), "Action"); ctrlTypeField.Bind(serializedObject); c.Add(ctrlTypeField);
 					var ctrlTargetField = new PropertyField(sp.FindPropertyRelative("sequenceControlTarget"), "Target Scope"); ctrlTargetField.Bind(serializedObject); c.Add(ctrlTargetField);
@@ -835,7 +852,7 @@ namespace Sperlich.Sequencer.Editor {
 			switch (step.type) {
 				case AnimType.PlayAudio: return $"<b>PlayAudio</b>{delay}";
 				case AnimType.TypeWriter: return $"<b>TypeWriter</b>{delay}";
-				case AnimType.Wait: return $"<b>Wait</b>  {(step.waitMethod == WaitMethod.Frames ? step.waitFrames + " Frames" : Dur(step.duration))}{delay}";
+				case AnimType.Wait: return $"<b>Wait</b>  {(step.waitMethod == WaitMethod.Frames ? step.waitFrames + " Frames" : step.waitRandomRange ? $"{step.waitRandomRangeMinMax.x:0.##}~{step.waitRandomRangeMinMax.y:0.##}s" : Dur(step.duration))}{delay}";
 				case AnimType.Event: return $"<b>Event</b>{delay}";
 				case AnimType.Anchor: return $"<b><color=#888888>#</color><color=#ffffff>{step.anchorLabel}</color></b>";
 				case AnimType.Repeat: return $"<b>Repeat</b> (→ <color=#888888>#</color><color=#ffffff>{step.repeatAnchorLabel}</color>){delay}";
@@ -913,7 +930,7 @@ namespace Sperlich.Sequencer.Editor {
 				case AnimType.PlayAudio:     return "Fires AudioSource.PlayOneShot with optional pitch/volume randomization.";
 				case AnimType.FadeAudio:     return "Tweens AudioSource.volume.";
 				case AnimType.TimeScale:     return "Tweens Time.timeScale (uses unscaled time internally).";
-				case AnimType.Wait:          return step.waitMethod == WaitMethod.Frames ? "Pauses the sequence for a fixed number of frames." : "Pauses the sequence for a duration in seconds.";
+				case AnimType.Wait:          return step.waitMethod == WaitMethod.Frames ? "Pauses the sequence for a fixed number of frames." : step.waitRandomRange ? "Pauses the sequence for a random duration between min and max." : "Pauses the sequence for a duration in seconds.";
 				case AnimType.WaitUntil:     return "Pauses the sequence until a condition/flag becomes true.";
 				case AnimType.Anchor:        return $"Jump target '#{step.anchorLabel}' — used as destination for Repeat steps.";
 				case AnimType.Repeat:        return $"Jumps back to anchor '#{step.repeatAnchorLabel}', creating a loop.";

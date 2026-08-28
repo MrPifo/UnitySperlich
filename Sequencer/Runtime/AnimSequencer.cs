@@ -73,13 +73,15 @@ namespace Sperlich.Sequencer {
 			_pollingWaits.Clear();
 			editorPlayingSeqIndex = -1;
 
-			if (!sequences.Any(s => s.trigger == TriggerType.OnDisable)) {
-				return;
-			}
-
-			gameObject.SetActive(true);
-			_isPlayingDisableSequence = true;
-			PlayDisableSequences();
+			// Bewusst KEIN gameObject.SetActive(true) mehr: Unity verbietet SetActive
+			// mitten in der Deaktivierungs-Rekursion ("GameObject is already being
+			// activated or deactivated"). Das passiert beim Pool-Recycling
+			// (SuperScrollView), beim Deaktivieren eines Parents oder beim Scene-Teardown.
+			// Das alte Re-Aktivieren wurde von Unity in diesen Fällen ohnehin still
+			// verworfen und nur als Fehler geloggt -> die Exit-Animation lief nie.
+			// OnDisable reagiert deshalb nur noch defensiv auf ein echtes Disable
+			// (Tweens gestoppt + State oben zurückgesetzt). Für eine animierte
+			// Exit-Variante: Disable() aufrufen statt gameObject.SetActive(false).
 		}
 		void OnDestroy() {
 			foreach (var kvp in _activeSequences) {
@@ -246,6 +248,50 @@ namespace Sperlich.Sequencer {
 			PrimeTween.Tween.Delay(this, delay, t => t.PlayByLabel(sequenceLabel));
 		}
 
+		/// <summary>
+		/// Sauberer, zuverlässiger Weg, das GameObject MIT Exit-Animation zu deaktivieren.
+		/// Spielt alle OnDisable-Sequences ab, WÄHREND das GameObject noch aktiv ist, und
+		/// deaktiviert es anschließend (über deactivateAfter im Sequenz-Abschluss).
+		///
+		/// Hintergrund: gameObject.SetActive(false) kann KEINE Animation mehr spielen, weil
+		/// Unity das Objekt bereits deaktiviert und ein Re-Aktivieren aus OnDisable verbietet.
+		/// Wer direkt SetActive(false) aufruft (z.B. Pooling), bekommt daher keine Animation —
+		/// das ist beabsichtigt und crasht nicht mehr.
+		/// </summary>
+		public void Disable() {
+			// Schon (in der Hierarchie) inaktiv? Dann gibt es nichts zu animieren.
+			if (!gameObject.activeInHierarchy) {
+				gameObject.SetActive(false);
+				return;
+			}
+
+			// Läuft bereits eine Disable-Sequence? Nicht doppelt starten.
+			if (_isPlayingDisableSequence) {
+				return;
+			}
+
+			// Keine OnDisable-Sequence konfiguriert -> einfach hart deaktivieren.
+			if (!sequences.Any(s => s.trigger == TriggerType.OnDisable && s.steps != null && s.steps.Count > 0)) {
+				gameObject.SetActive(false);
+				return;
+			}
+
+			// Laufende Tweens stoppen, damit die Exit-Animation sauber von der
+			// aktuellen Position übernimmt (kein visueller Pop zum Ursprung).
+			foreach (var kvp in _activeSequences.ToList()) {
+				foreach (var s in kvp.Value.ToList()) {
+					if (s.isAlive) {
+						s.Stop();
+					}
+				}
+			}
+			_activeSequences.Clear();
+			_pollingWaits.Clear();
+
+			_isPlayingDisableSequence = true;
+			PlayDisableSequences();
+		}
+
 		public void Pause(string sequenceLabel) {
 			var seq = sequences.Find(s => s.label == sequenceLabel);
 			if (seq != null) {
@@ -320,10 +366,42 @@ namespace Sperlich.Sequencer {
 
 			seq.activeTweens.Clear();
 			_pollingWaits.RemoveAll(w => w.seq == seq);
+			RestoreTransientState(seq);
 			seq.SetPlaying(false);
 
 			if (editorPlayingSeqIndex == sequences.IndexOf(seq)) {
 				editorPlayingSeqIndex = -1;
+			}
+		}
+		// Punch/Shake/Bounce-Tweens erfassen den Transform-Wert beim Start als Basis und kehren erst beim Complete dorthin zurück.
+		// Wird ein solcher Tween mit Stop() unterbrochen (z.B. beim Neustart einer Sequence), bleibt ein Rest-Offset stehen,
+		// den der nächste Durchlauf als neue Basis übernimmt -> Drift. Hier den gecachten Initialwert wiederherstellen.
+		void RestoreTransientState(AnimSequence seq) {
+			if (seq == null || seq.steps == null) {
+				return;
+			}
+
+			foreach (var step in seq.steps) {
+				if (!step.isInitialized || step.resolvedTarget == null) {
+					continue;
+				}
+
+				switch (step.type) {
+					case AnimType.PunchScale:
+						step.resolvedTarget.localScale = step.initialLocalScale;
+						break;
+					case AnimType.Bounce:
+					case AnimType.ShakePosition:
+						if (step.isUI && step.rectTarget != null)
+							step.rectTarget.anchoredPosition = step.initialAnchoredPosition;
+						else
+							step.resolvedTarget.localPosition = step.initialLocalPosition;
+						break;
+					case AnimType.PunchRotate:
+					case AnimType.ShakeRotation:
+						step.resolvedTarget.localEulerAngles = step.initialLocalRotation;
+						break;
+				}
 			}
 		}
 		void CompleteSequenceInternal(AnimSequence seq) {
@@ -503,6 +581,8 @@ namespace Sperlich.Sequencer {
 				float stepDuration = step.duration;
 				if (IsInstantType(step.type)) stepDuration = 0.001f;
 				else if (IsLogicType(step.type)) stepDuration = 0f;
+				else if (step.type == AnimType.Wait && step.waitMethod == WaitMethod.Seconds && step.waitRandomRange)
+					stepDuration = UnityEngine.Random.Range(step.waitRandomRangeMinMax.x, step.waitRandomRangeMinMax.y);
 				else if (step.type == AnimType.TypeWriter && step.cachedText != null) {
 					string targetText = string.IsNullOrEmpty(step.setTextValue) ? step.cachedText.text : step.setTextValue;
 					stepDuration = Mathf.Max((targetText ?? "").Length, 1f) / Mathf.Max(step.typeWriterCharsPerSecond, 1f);
@@ -1458,6 +1538,8 @@ namespace Sperlich.Sequencer {
 			public bool waitUntilValue = false;
 			public WaitMethod waitMethod = WaitMethod.Seconds;
 			public int waitFrames = 1;
+			public bool waitRandomRange = false;
+			public Vector2 waitRandomRangeMinMax = new Vector2(0.5f, 1f);
 			public float setFadeValue = 1f;
 
 			[Range(0f, 1f)] public float fillAmountFrom = 0f;

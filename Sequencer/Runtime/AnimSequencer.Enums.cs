@@ -57,7 +57,9 @@ namespace Sperlich.Sequencer {
 		Color = 2,
 		Fade = 3,
 		Text = 4,
+		[UnityEngine.InspectorName("SpriteRenderer")]
 		Sprite = 5,
+		[UnityEngine.InspectorName("Image (UI Sprite)")]
 		Image = 6,
 		CanvasGroupState = 7,
 		TimeScale = 8,
