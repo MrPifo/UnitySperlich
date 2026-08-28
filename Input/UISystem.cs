@@ -31,6 +31,7 @@ public class UISystem : MonoBehaviour {
 	private bool isDisabled;
 
 	public static bool HasSelection => EventSystem != null && EventSystem.currentSelectedGameObject != null;
+	public static bool IsPointerOverUI => EventSystem != null && EventSystem.IsPointerOverGameObject();
 	public static bool PreventBackgroundDeselect {
 		get => Instance != null && Instance.inputModule != null && !Instance.inputModule.deselectIfBackgroundClicked;
 		set { if (Instance != null && Instance.inputModule != null) Instance.inputModule.deselectIfBackgroundClicked = !value; }
